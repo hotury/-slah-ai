@@ -3,210 +3,127 @@ import pandas as pd
 import joblib
 import plotly.graph_objects as go
 from Bio.Seq import Seq
-import io
 
 # Sayfa Ayarları
 st.set_page_config(page_title="Biovalent Sentinel Pro", page_icon="🧬", layout="wide")
 
 # --- ÖZEL TASARIM (CSS) ---
-# Siyah kutular ve beyaz yazılar için özelleştirilmiş tasarım
 st.markdown("""
     <style>
     .main { background-color: #0e1117; color: white; }
     .stApp { background-color: #0e1117; }
-    
-    /* Veri Kutucukları (Cards) */
     .metric-card {
         background-color: #1a1c23;
         border: 1px solid #30363d;
-        padding: 20px;
+        padding: 15px;
         border-radius: 10px;
         text-align: center;
         margin-bottom: 10px;
+        min-height: 100px;
     }
-    .metric-value {
-        font-size: 24px;
-        font-weight: bold;
-        color: #ffffff;
-    }
-    .metric-label {
-        font-size: 14px;
-        color: #8b949e;
-        margin-top: 5px;
-    }
-    
-    /* Tablo ve Sekme Düzenlemeleri */
-    .stTabs [data-baseweb="tab-list"] { gap: 24px; background-color: #0e1117; }
-    .stTabs [data-baseweb="tab"] {
-        height: 50px;
-        color: #8b949e;
-        font-weight: 600;
-    }
-    .stTabs [data-baseweb="tab"]:hover { color: white; }
-    .stTabs [aria-selected="true"] { color: #58a6ff !important; border-bottom-color: #58a6ff !important; }
-    
-    /* Input Alanları */
-    .stTextArea textarea { background-color: #0d1117; color: white; border: 1px solid #30363d; }
+    .metric-value { font-size: 22px; font-weight: bold; color: #ffffff; }
+    .metric-label { font-size: 12px; color: #8b949e; margin-top: 5px; text-transform: uppercase; }
+    .stTabs [data-baseweb="tab-list"] { background-color: #0e1117; }
+    .stTabs [data-baseweb="tab"] { color: #8b949e; font-weight: 600; }
+    .stTabs [aria-selected="true"] { color: #58a6ff !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- FONKSİYONLAR ---
-
-def dna_to_protein(dna_sequence):
-    """DNA dizisini proteine çevirir."""
-    try:
-        dna_seq = Seq(dna_sequence.strip().upper().replace(" ", ""))
-        return str(dna_seq.translate(to_stop=True))
-    except Exception:
-        return None
-
-def calculate_biological_metrics(protein_seq):
-    """Biyofiziksel kurallarla bitki parametrelerini hesaplar."""
+# --- GELİŞMİŞ ANALİZ MOTORU ---
+def analyze_comprehensive_metrics(protein_seq, bitki_turu, model_data):
     if not protein_seq: return None
+    L = len(protein_seq)
     
-    length = len(protein_seq)
-    # 1. Moleküler Ağırlık (Dalton)
-    mw = length * 110.1
+    # 1. TEMEL VERİLER (Biyofiziksel)
+    mw = L * 110.1
     
-    # 2. Raf Ömrü (İnstabilite İndeksi Yaklaşımı)
-    # Prolin ve Valin dengesi üzerinden stabilite tahmini
-    stability = (protein_seq.count('P') + protein_seq.count('V')) / length
-    raf_omru = 10 + (stability * 120)
+    # 2. HASAT VE GELİŞİM (V, L, I Amino Asitleri - Metabolizma Hızı)
+    metabolic_rate = (protein_seq.count('V') + protein_seq.count('L') + protein_seq.count('I')) / L
+    baz_hasat = model_data['bitki_parametreleri'][bitki_turu].get('baz_hasat_suresi', 90)
+    hasat_suresi = baz_hasat - (metabolic_rate * 40)
     
-    # 3. Hastalık Dayanımı (Sistein ve Disülfit Köprüleri)
-    cys_count = protein_seq.count('C')
-    hastalik_skoru = min(100, (cys_count / length) * 600 + 35)
+    # 3. ÇİMLENME GÜCÜ (Vigor - Alanin ve Glisin Yoğunluğu)
+    vigor = min(100, ((protein_seq.count('A') + protein_seq.count('G')) / L) * 400 + 30)
     
-    # 4. Kuraklık Toleransı (Hidropati/Alifatik İndeks)
-    alifatik = (protein_seq.count('A') + protein_seq.count('I') + protein_seq.count('L')) / length
-    kuraklik_skoru = min(100, alifatik * 300)
+    # 4. RAF ÖMRÜ (İnstabilite İndeksi Yaklaşımı)
+    stability = (protein_seq.count('P') + protein_seq.count('V')) / L
+    raf_omru = 7 + (stability * 100)
     
-    # 5. Brix (Tat ve Aroma Potansiyeli)
-    aroma_factor = (protein_seq.count('E') + protein_seq.count('D') + protein_seq.count('Q')) / length
-    brix_potansiyeli = 3.5 + (aroma_factor * 25)
+    # 5. DİRENÇLER (Sistein ve Hidropati)
+    hastalik = min(100, (protein_seq.count('C') / L) * 500 + 40)
+    stres_toleransi = min(100, metabolic_rate * 250) # Soğuk/Tuz direnci
     
+    # 6. KALİTE (Brix ve Aroma)
+    aroma = (protein_seq.count('E') + protein_seq.count('D')) / L
+    brix = 3.5 + (aroma * 25)
+
     return {
-        "MW": mw,
-        "Raf_Omru": round(raf_omru, 1),
-        "Hastalik": round(hastalik_skoru, 1),
-        "Kuraklik": round(kuraklik_skoru, 1),
-        "Brix": round(brix_potansiyeli, 2)
+        "MW": mw, "Hasat_Suresi": round(hasat_suresi), "Vigor": round(vigor, 1),
+        "Raf_Omru": round(raf_omru, 1), "Hastalik": round(hastalik, 1),
+        "Brix": round(brix, 2), "Stres": round(stres_toleransi, 1)
     }
 
-def show_metric_card(label, value, unit=""):
-    """Havalı siyah kutucuk tasarımı."""
-    st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-value">{value}{unit}</div>
-            <div class="metric-label">{label}</div>
-        </div>
-    """, unsafe_allow_html=True)
+def show_card(label, value, unit=""):
+    st.markdown(f"""<div class="metric-card"><div class="metric-value">{value}{unit}</div><div class="metric-label">{label}</div></div>""", unsafe_allow_html=True)
 
 # --- MODEL YÜKLEME ---
 try:
     model_data = joblib.load('biovalent_final.pkl')
-    st.sidebar.success("✅ Islah Motoru Hazır")
 except:
-    st.sidebar.error("❌ 'biovalent_final.pkl' dosyası eksik!")
+    st.error("Model dosyası bulunamadı!")
     st.stop()
 
-# --- ANA EKRAN ---
-st.title("🧬 Biovalent Sentinel")
-st.markdown("Genetik Haritadan Geleceğin Hasadına: Dijital Islah İstasyonu")
+# --- ARAYÜZ ---
+st.title("🧬 Biovalent Sentinel: Full Spectrum")
+st.markdown("Bir tohumun genetik kaderini tüm detaylarıyla görün.")
 
-tab1, tab2, tab3 = st.tabs(["🔍 Genetik Analiz", "🧪 F1 Melezleme (Hibrit)", "📊 Verim Tahmini"])
+# Yan Panel (Saha Koşulları)
+with st.sidebar:
+    st.header("⚙️ Saha Parametreleri")
+    tur = st.selectbox("Bitki Türü", list(model_data['bitki_parametreleri'].keys()))
+    alan = st.number_input("Ekili Alan (Dönüm)", value=1)
+    toprak_kalitesi = st.select_slider("Toprak Verimliliği", options=["Düşük", "Orta", "Yüksek"], value="Orta")
 
-with tab1:
-    st.subheader("Biyolojik Profil Çıkarımı")
-    input_type = st.radio("Veri Giriş Yöntemi:", ["Dosya Yükle (.txt, .fasta)", "Manuel Giriş"], horizontal=True)
+# Ana Ekran
+raw_input = st.text_area("Genetik Diziyi (DNA/Protein) Yapıştırın:", height=100)
+
+if raw_input:
+    # DNA -> Protein Çevrimi
+    is_dna = all(c in "ATGCN " for c in raw_input.strip().upper()[:20])
+    p_seq = str(Seq(raw_input.strip().upper()).translate(to_stop=True)) if is_dna else raw_input.strip().upper()
     
-    raw_data = ""
-    if input_type == "Dosya Yükle (.txt, .fasta)":
-        uploaded_file = st.file_uploader("Laboratuvar Dosyasını Seçin", type=['txt', 'fasta'])
-        if uploaded_file:
-            raw_data = uploaded_file.read().decode("utf-8")
-            if ">" in raw_data: # FASTA formatı kontrolü
-                raw_data = raw_data.split('\n', 1)[-1].replace('\n', '').replace('\r', '')
-    else:
-        raw_data = st.text_area("DNA veya Protein Dizisini Buraya Yapıştırın:", height=150)
-
-    if raw_data:
-        # DNA/Protein Tespiti ve Çeviri
-        is_dna = all(c in "ATGCN " for c in raw_data.strip().upper()[:20])
-        if is_dna:
-            p_seq = dna_to_protein(raw_data)
-            st.info("🧬 DNA dizisi tespit edildi, proteine çevrildi.")
-        else:
-            p_seq = raw_data.strip().upper()
-        
-        metrics = calculate_biological_metrics(p_seq)
-        
-        if metrics:
-            # Havalı Veri Kutucukları
-            m1, m2, m3, m4, m5 = st.columns(5)
-            with m1: show_metric_card("Mol. Ağırlık", f"{metrics['MW']:.0f}", " Da")
-            with m2: show_metric_card("Raf Ömrü", metrics['Raf_Omru'], " Gün")
-            with m3: show_metric_card("Hastalık Direnci", f"%{metrics['Hastalik']}")
-            with m4: show_metric_card("Kuraklık Eşiği", f"%{metrics['Kuraklik']}")
-            with m5: show_metric_card("Brix (Tat)", metrics['Brix'])
-
-            # Radar Grafiği
-            categories = ['Raf Ömrü', 'Hastalık Dayanımı', 'Kuraklık Toleransı', 'Brix (Tat)']
-            values = [min(100, metrics['Raf_Omru']*3), metrics['Hastalik'], metrics['Kuraklik'], min(100, metrics['Brix']*10)]
-            
-            fig = go.Figure()
-            fig.add_trace(go.Scatterpolar(r=values, theta=categories, fill='toself', line_color='#58a6ff'))
-            fig.update_layout(
-                polar=dict(bgcolor="#1a1c23", radialaxis=dict(visible=True, range=[0, 100], color="white")),
-                paper_bgcolor="#0e1117", font_color="white", showlegend=False, title="Genetik Karakter Radarı"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-with tab2:
-    st.subheader("Dijital F1 Hibrit Simülasyonu")
-    st.write("Anne ve Baba hatlarını sanal ortamda çaprazlayarak melez gücünü (heterosis) ölçün.")
+    m = analyze_comprehensive_metrics(p_seq, tur, model_data)
     
-    col_a, col_b = st.columns(2)
-    a_dna = col_a.text_area("Anne (Saf Hat) Dizisi:", key="a_dna")
-    b_dna = col_b.text_area("Baba (Saf Hat) Dizisi:", key="b_dna")
-    
-    if st.button("HİBRİT ANALİZİ YAP"):
-        if a_dna and b_dna:
-            # Basit F1 Mantığı: Ebeveyn MW ortalaması + %18 Heterosis
-            p_a = dna_to_protein(a_dna) if "A" in a_dna[:5].upper() else a_dna
-            p_b = dna_to_protein(b_dna) if "A" in b_dna[:5].upper() else b_dna
-            
-            mw_a = len(p_a) * 110.1
-            mw_b = len(p_b) * 110.1
-            f1_mw = ((mw_a + mw_b) / 2) * 1.18 # %18 hibrit azmanlığı
-            
-            st.markdown(f"""
-                <div style="background-color: #1a1c23; padding: 20px; border-radius: 10px; border-left: 5px solid #58a6ff;">
-                    <h3 style="color: white; margin: 0;">F1 Melezi Öngörüsü</h3>
-                    <p style="color: #8b949e;">Bu çaprazlama sonucu beklenen Moleküler Ağırlık: <b>{f1_mw:.0f} Da</b></p>
-                    <p style="color: #58a6ff;">🚀 Tahmini Verim Artışı (Heterosis): %18</p>
-                </div>
-            """, unsafe_allow_html=True)
+    if m:
+        # SATIR 1: HASAT VE VERİM
+        st.subheader("🗓️ Üretim ve Hasat Takvimi")
+        r1_c1, r1_c2, r1_c3, r1_c4 = st.columns(4)
+        with r1_c1: show_card("Hasat Süresi", m['Hasat_Suresi'], " Gün")
+        with r1_c2: show_card("Çimlenme Gücü (Vigor)", f"%{m['Vigor']}")
+        with r1_c3: 
+            katsayi = model_data['bitki_parametreleri'][tur]['oran']
+            gramaj = m['MW'] * katsayi * (1.2 if toprak_kalitesi=="Yüksek" else 0.8 if toprak_kalitesi=="Düşük" else 1.0)
+            show_card("Meyve Ağırlığı", f"{gramaj:.1f}", " gr")
+        with r1_c4:
+            toplam_tonaj = (model_data['bitki_parametreleri'][tur]['baz_verim'] * alan * (gramaj/100)) / 10
+            show_card("Toplam Rekolte", f"{toplam_tonaj:.2f}", " Ton")
 
-with tab3:
-    st.subheader("Saha Projeksiyonu")
-    if 'metrics' in locals():
-        with st.sidebar:
-            st.header("🌍 Saha Koşulları")
-            tür = st.selectbox("Bitki Türü", list(model_data['bitki_parametreleri'].keys()))
-            alan = st.number_input("Ekili Alan (Dönüm)", value=1, min_value=1)
-            is_good_soil = st.checkbox("Yüksek Verimli Toprak", value=True)
+        # SATIR 2: DAYANIKLILIK VE STRES
+        st.subheader("🛡️ Dayanıklılık ve Adaptasyon")
+        r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(4)
+        with r2_c1: show_card("Hastalık Direnci", f"%{m['Hastalik']}")
+        with r2_c2: show_card("Raf Ömrü", m['Raf_Omru'], " Gün")
+        with r2_c3: show_card("Çevresel Stres Toleransı", f"%{m['Stres']}")
+        with r2_c4: show_card("Brix (Tat Oranı)", m['Brix'])
 
-        katsayı = model_data['bitki_parametreleri'][tür]['oran']
-        baz = model_data['bitki_parametreleri'][tür]['baz_verim']
+        # GÖRSELLEŞTİRME (RADAR)
+        categories = ['Çimlenme Gücü', 'Hastalık Direnci', 'Stres Toleransı', 'Raf Ömrü', 'Brix (Tat)']
+        values = [m['Vigor'], m['Hastalik'], m['Stres'], min(100, m['Raf_Omru']*3), min(100, m['Brix']*10)]
         
-        gramaj = metrics['MW'] * katsayı
-        if is_good_soil: gramaj *= 1.1
-        
-        toplam_tonaj = (baz * alan * (gramaj/100)) / 10
-
-        c1, c2 = st.columns(2)
-        with c1: show_metric_card("Tahmini Meyve Ağırlığı", f"{gramaj:.1f}", " gr")
-        with c2: show_metric_card("Toplam Rekolte", f"{toplam_tonaj:.2f}", " Ton")
-    else:
-        st.warning("Lütfen önce 'Genetik Analiz' sekmesinden bir dizi yükleyin.")
+        fig = go.Figure()
+        fig.add_trace(go.Scatterpolar(r=values, theta=categories, fill='toself', line_color='#58a6ff'))
+        fig.update_layout(
+            polar=dict(bgcolor="#1a1c23", radialaxis=dict(visible=True, range=[0, 100], color="white")),
+            paper_bgcolor="#0e1117", font_color="white", showlegend=False, height=450
+        )
+        st.plotly_chart(fig, use_container_width=True)
