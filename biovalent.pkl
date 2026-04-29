@@ -1,0 +1,22 @@
+import joblib
+
+model_data = joblib.load("biovalent.pkl")
+
+X_scaler = model_data["scalers"]["X_scaler"]
+models = model_data["traits_model"]
+
+genotype_vector = [0, 1, 2, 0, 1]
+
+X = np.array([genotype_vector], dtype=float)
+X_scaled = X_scaler.transform(X)
+
+preds = {}
+for trait, m in models.items():
+    if "DISEASE" in trait.upper():
+        prob = m.predict_proba(X_scaled)[0, 1]
+        preds[trait] = prob * 100
+    else:
+        pred = m.predict(X_scaled)[0]
+        preds[trait] = pred
+
+print(preds)
