@@ -1,155 +1,82 @@
-import os
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import Ridge
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import StandardScaler
-import joblib
+from biovalent_algo import BiovalentEngine
 
-# --- 1. YAPILANDIRMA VE DOSYA KONTROLÜ ---
-# Dosya yollarını dinamik hale getirerek "okunamadı" hatasını engelliyoruz
-BASE_DIR = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else os.getcwd()
-DATA_DIR = os.path.join(BASE_DIR, "data")
-CUSTOM_MODEL_FILE = os.path.join(BASE_DIR, "biovalent_custom.pkl")
-MASTER_DATA_FILE = os.path.join(BASE_DIR, "biovalent_final.pkl")
-DEFAULT_AI_MODEL = os.path.join(BASE_DIR, "biovalent.pkl")
+st.set_page_config(page_title="Biovalent AI | Admin", layout="wide")
 
-# --- 2. MODEL EĞİTİM FONKSİYONU ---
-def train_custom_model():
-    if not os.path.exists(DATA_DIR):
-        st.error("❌ 'data/' klasörü bulunamadı.")
-        return None
-    try:
-        X_df = pd.read_csv(os.path.join(DATA_DIR, "marker_matrix.csv"), index_col="GENOTYPE")
-        y_df = pd.read_csv(os.path.join(DATA_DIR, "phenotype_data.csv"), index_col="GENOTYPE")
-        idx = X_df.index.intersection(y_df.index)
-        X, y = X_df.loc[idx].values, y_df.loc[idx]
-        
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
-        models = {}
-        for trait in y.columns:
-            if "DISEASE" in trait.upper() or "RESISTANCE" in trait.upper():
-                m = RandomForestClassifier(n_estimators=100, random_state=42)
-                m.fit(X_scaled, (y[trait] > 0.5).astype(int))
-            else:
-                m = Ridge(alpha=1.0)
-                m.fit(X_scaled, y[trait])
-            models[trait] = m
+# Sistemi sadece ilk açılışta yükle
+if 'engine' not in st.session_state:
+    st.session_state.engine = BiovalentEngine()
 
-        model_data = {
-            "scaler": scaler,
-            "models": models,
-            "traits": list(y.columns),
-            "n_features": X.shape[1],
-            "type": "custom"
-        }
-        joblib.dump(model_data, CUSTOM_MODEL_FILE)
-        return model_data
-    except Exception as e:
-        st.error(f"Eğitim hatası: {e}")
-        return None
+st.title("🛡️ Biovalent AI - Islah Kontrol Paneli")
 
-# --- 3. TAHMİN MOTORU ---
-def predict_engine(genotype_vector, model_data, plant_type=None, master_info=None):
-    X = np.array([genotype_vector], dtype=float)
-    X_scaled = model_data["scaler"].transform(X)
-    preds = {}
-    for trait, m in model_data["models"].items():
-        if hasattr(m, "predict_proba"):
-            preds[trait] = m.predict_proba(X_scaled)[0, 1] * 100
-        else:
-            preds[trait] = m.predict(X_scaled)[0]
+# 1. VERİ YÜKLEME BÖLÜMÜ
+with st.expander("📁 Şirket Veri Entegrasyonu (AI Eğitimi)", expanded=True):
+    st.markdown("Saha verilerinizi içeren CSV dosyasını yükleyin. CSV içinde **Field_Brix** ve **Field_Yield** adlı iki sütun olması zorunludur.")
+    uploaded_file = st.file_uploader("CSV Dosyası Yükle", type="csv")
     
-    if plant_type and master_info and plant_type in master_info.get("bitki_parametreleri", {}):
-        params = master_info["bitki_parametreleri"][plant_type]
-        for trait in preds:
-            if not ("DISEASE" in trait.upper() or "RESISTANCE" in trait.upper()):
-                preds[trait] = params["baz_verim"] + (preds[trait] * params["oran"])
-    return preds
-
-# --- 4. ARAYÜZ (STREAMLIT) ---
-st.set_page_config(page_title="Biovalent AI | Dijital Islah", layout="wide", page_icon="🧬")
-
-# Başlık Paneli (İsimler güncellendi)
-st.markdown("<h1 style='text-align: center; color: #00CC96;'>🧬 Biovalent AI Analiz Platformu</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>Yeni Nesil Biyoteknolojik Karar Destek Sistemi</p>", unsafe_allow_html=True)
-
-# Yan Panel: Model Seçimi
-with st.sidebar:
-    st.header("🤖 Sistem Yönetimi")
-    selection = st.radio("Zeka Modeli:", ["Biovalent Master Zekası", "Özel Islah Modeli"])
-    
-    # Master dosyayı güvenli yükleme
-    master_data = None
-    if os.path.exists(MASTER_DATA_FILE):
+    if uploaded_file:
         try:
-            master_data = joblib.load(MASTER_DATA_FILE)
-        except:
-            st.error("⚠️ Master pkl dosyası bozuk veya okunamıyor.")
+            df = pd.read_csv(uploaded_file)
+            st.dataframe(df.head(3), use_container_width=True)
+            if st.button("Saha Verisiyle Modeli Güncelle"):
+                expected_snps = st.session_state.engine.train_field_ai(df)
+                st.session_state.expected_snps = expected_snps
+                st.success(f"✅ Yapay Zeka tarlanızı tanıdı! Model {expected_snps} adet SNP genotipi için kalibre edildi.")
+        except Exception as e:
+            st.error(f"Veri yükleme hatası. Sütun adlarını kontrol edin. Hata detayı: {e}")
 
-    active_model = None
-    if selection == "Biovalent Master Zekası":
-        if os.path.exists(DEFAULT_AI_MODEL):
-            active_model = joblib.load(DEFAULT_AI_MODEL)
-            active_model["type"] = "master"
-            st.success("✅ Master Zeka Yüklendi")
+# 2. GENETİK YORUMLAMA BÖLÜMÜ
+st.subheader("🧬 Gen Haritası Yorumlama")
+st.markdown("Örnek 20 SNP formatı: `1,2,0,1,2,0,1,1,2,0,1,0,2,1,0,2,1,0,2,1`")
+raw_dna = st.text_input("Tohum SNP Verisi (Virgülle ayırın):", "1,2,0,1,2,0,1,1,2,0,1,0,2,1,0,2,1,0,2,1")
+
+if st.button("Analiz Et"):
+    try:
+        # Gelen metni rakam dizisine çevir
+        dna_vec = np.array([int(x.strip()) for x in raw_dna.split(",")])
+        
+        # Eğer AI eğitilmişse, DNA uzunluğu CSV'deki kolon sayısına eşit olmalı
+        if 'expected_snps' in st.session_state and len(dna_vec) != st.session_state.expected_snps:
+            st.warning(f"⚠️ Eğittiğiniz CSV dosyasında {st.session_state.expected_snps} adet SNP kolonu vardı. Siz analize {len(dna_vec)} adet girdiniz. Lütfen sayıları eşitleyin.")
         else:
-            st.warning("⚠️ biovalent.pkl bulunamadı. Lütfen ana model dosyasını kontrol edin.")
-    else:
-        if os.path.exists(CUSTOM_MODEL_FILE):
-            active_model = joblib.load(CUSTOM_MODEL_FILE)
-            st.success("✅ Özel Model Aktif")
-        
-        if st.button("🚀 Özel Modeli Eğit"):
-            with st.spinner("Eğitiliyor..."):
-                active_model = train_custom_model()
-                if active_model: st.rerun()
+            res = st.session_state.engine.predict_hybrid(dna_vec)
+            
+            st.markdown("### 📊 Analiz Sonuçları")
+            col1, col2, col3 = st.columns(3)
+            
+            # Kayıp hesaplamaları
+            diff_brix = res['theory']['lab_brix'] - res['field']['brix']
+            col1.metric(
+                label="Laboratuvar (Brix) -> Saha", 
+                value=f"{res['field']['brix']} Brix", 
+                delta=f"-{round(diff_brix, 2)} Kayıp", 
+                delta_color="inverse"
+            )
+            
+            diff_yield = res['theory']['lab_yield'] - res['field']['yield']
+            col2.metric(
+                label="Laboratuvar (Verim) -> Saha", 
+                value=f"{res['field']['yield']} Ton/Ha", 
+                delta=f"-{round(diff_yield, 2)} Kayıp", 
+                delta_color="inverse"
+            )
+            
+            col3.metric("Teorik Raf Ömrü", f"{res['theory']['shelf_life']} Gün")
 
-# Ana Uygulama Mantığı
-if active_model:
-    tab1, tab2, tab3 = st.tabs(["📂 Toplu Analiz", "🔬 Manuel Test", "🧬 Nesil Simülatörü"])
-
-    with tab1:
-        st.subheader("Laboratuvar Verisi İşleme")
-        p_type = None
-        if active_model.get("type") == "master" and master_data:
-            p_type = st.selectbox("Bitki Türü:", list(master_data["bitki_parametreleri"].keys()))
-        
-        uploaded = st.file_uploader("Aday Veri Setini Yükle (CSV)", type="csv")
-        if uploaded:
-            df = pd.read_csv(uploaded)
-            if st.button("Analizi Başlat"):
-                results = []
-                for i, row in df.iterrows():
-                    vec = row.select_dtypes(include=[np.number]).values
-                    if len(vec) == active_model["n_features"]:
-                        p = predict_engine(vec, active_model, p_type, master_data)
-                        p["Tohum_ID"] = row.get("ID", f"T_ID_{i}")
-                        results.append(p)
+            # BURSA GEN YORUMLAMA
+            st.markdown("---")
+            st.markdown("### 🔬 Bursa Gen Yorumlama / Darboğaz Analizi")
+            
+            if len(dna_vec) >= 19 and dna_vec[18] == 2:
+                st.error("⚠️ **Biyokimyasal Uyarı (SNP_18):** Molekül ağırlığı eşiği aşıldı. Protein katlanmasındaki metabolik yük nedeniyle verimde %18 biyolojik ceza uygulandı.")
+            elif len(dna_vec) >= 5 and dna_vec[4] == 2:
+                st.warning("⚠️ **Asidite Uyarısı (SNP_4):** pH dengesinde kayma tespit edildi. Şeker/Asit oranı bozulduğu için Brix potansiyelinde %15 biyolojik kayıp var.")
+            elif diff_brix > 2.0 or diff_yield > 20.0:
+                st.info("📉 **Saha İklim Uyarısı:** Biyolojik tavanınız yüksek olmasına rağmen yapay zeka saha verilerinizde ciddi bir düşüş öngörüyor. Tarlanızdaki çevresel stres (sıcaklık/su) genetiği baskılıyor.")
+            else:
+                st.success("✅ **Genotip Onayı:** Bu genetik dizilim tarlanızın çevresel şartlarıyla yüksek uyum gösteriyor. Stabilite mükemmel.")
                 
-                res_df = pd.DataFrame(results)
-                st.dataframe(res_df, use_container_width=True)
-                
-                csv = res_df.to_csv(index=False).encode('utf-8')
-                st.download_button("📥 Analiz Raporunu İndir", data=csv, file_name="biovalent_rapor.csv")
-
-    with tab2:
-        st.subheader("Tekli Aday Tahmini")
-        val_input = st.text_input("SNP Vektörü Girişi:", "0,1,1,0,2")
-        if st.button("Sonuçları Göster"):
-            v = [float(x.strip()) for x in val_input.split(",")]
-            res = predict_engine(v, active_model, p_type if 'p_type' in locals() else None, master_data)
-            for t, val in res.items():
-                st.write(f"**{t}:** {val:.2f}")
-
-    with tab3:
-        st.subheader("Genetik Limit ve Çaprazlama")
-        st.info("Bu modül, Biovalent AI'nın hibritleme potansiyelini hesaplar.")
-        # Melezleme kodları buraya entegre edilebilir (Önceki sürümdeki yapı korunmuştur)
-
-else:
-    st.info("Lütfen sol taraftan bir zeka modeli seçerek başlayın.")
+    except ValueError:
+        st.error("Hata: Lütfen harf kullanmayın, sadece rakamları aralarında virgül bırakarak yazın.")
