@@ -17,20 +17,28 @@ class IslahAI:
         self.model = None
         self.is_trained = False
 
+    def process_genome_file(self, file_content):
+        """FASTA veya TXT formatındaki genetik haritayı temizler."""
+        lines = file_content.splitlines()
+        # FASTA başlıklarını (>) ve boş satırları ayıkla
+        clean_seq = "".join([line.strip() for line in lines if not line.startswith(">")])
+        return clean_seq.upper().replace(" ", "")
+
     def translate_dna(self, dna_sequence):
+        """Temizlenmiş DNA'yı Proteine çevirir."""
         try:
-            # Temizlik: Boşluk, alt satır ve FASTA başlıklarını (>) temizle
-            clean_dna = "".join([line for line in dna_sequence.splitlines() if not line.startswith(">")])
-            clean_dna = clean_dna.strip().upper().replace(" ", "")
-            coding_dna = Seq(clean_dna)
+            coding_dna = Seq(dna_sequence)
+            # Stop kodonuna kadar çevir
             return str(coding_dna.translate(to_stop=True))
-        except: return None
+        except Exception as e:
+            return None
 
     def calculate_aa_metrics(self, protein_seq):
         if not protein_seq: return None
         seq_len = len(protein_seq)
         if seq_len == 0: return None
         
+        # Amino Asit Grupları Frekans Analizi
         metrics = {
             "sugar_index": sum(protein_seq.count(x) for x in "ST") / seq_len,
             "growth_index": sum(protein_seq.count(x) for x in "LIV") / seq_len,
@@ -46,7 +54,6 @@ class IslahAI:
         if not m: return None, None
         cfg = self.PLANT_CONFIG.get(plant_type, self.PLANT_CONFIG["Domates"])
         
-        # Anahtar isimlerini standartlaştırıyoruz
         results = {
             "Brix": round(4.0 + (m["sugar_index"] * 25 * cfg["brix"]), 2),
             "Verim": round(50 + (m["growth_index"] * 120 * cfg["yield"] / 10), 2),
