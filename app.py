@@ -1,47 +1,65 @@
 import streamlit as st
-from biovalent_algo import BiovalentEngine
+import pandas as pd
+from biovalent_engine import IslahAI
 
-st.set_page_config(page_title="Biovalent AI | Biyokimyasal Analiz", layout="wide")
+st.set_page_config(page_title="Biovalent Islah AI", layout="wide")
 
-if 'engine' not in st.session_state:
-    st.session_state.engine = BiovalentEngine()
+if 'ai_engine' not in st.session_state:
+    st.session_state.ai_engine = IslahAI()
 
-st.title("🛡️ Biovalent AI: Biyokimyasal Islah ve Hücre Analizi")
-st.markdown("Bitki genetiğindeki amino asit değişimlerinin fenotip üzerindeki tüm etkilerini hesaplayın.")
+st.title("🧬 Islah AI: Genetik Haritadan Saha Performansına")
 
-# 1. BİTKİ SEÇİMİ
-selected_plant = st.selectbox("Çalışılacak Bitki Türünü Seçin:", list(st.session_state.engine.PLANT_DB.keys()))
-plant_info = st.session_state.engine.PLANT_DB[selected_plant]
-
-# 2. AMİNO ASİT DEĞİŞİMLERİ GİRDİSİ
-st.subheader("🧬 Amino Asit ve Protein Değişimleri")
-possible_mutations = list(plant_info["mutations"].keys())
-selected_mutations = st.multiselect("Tohumda Tespit Edilen Değişimler:", possible_mutations)
-
-if st.button("Tam Analizi Başlat"):
-    result = st.session_state.engine.run_biochemical_analysis(selected_plant, selected_mutations)
+# --- YAN PANEL: AI EĞİTİM ---
+with st.sidebar:
+    st.header("🏢 Şirket Özel AI Eğitimi")
+    st.write("Kendi saha verilerinizi yükleyerek AI'yı kalibre edin.")
+    uploaded_file = st.file_uploader("Saha Verisi (CSV)", type="csv")
     
-    if result:
-        # 3. TÜM VERİLERİN ÇIKARTILMASI (METRİKLER)
-        st.subheader("📊 Tahmini Tohum Performans Kartı")
-        cols = st.columns(len(result['stats']))
-        
-        for i, (param, val) in enumerate(result['stats'].items()):
-            cols[i].metric(label=param, value=f"{round(val, 2)}")
+    if uploaded_file:
+        df = pd.read_csv(uploaded_file)
+        if st.button("Modeli Eğit"):
+            st.session_state.ai_engine.train_field_model(df)
+            st.success("AI Sizin Sahanız İçin Eğitildi!")
 
-        # 4. PROTEİN VE HÜCRE ANALİZ RAPORU
-        st.markdown("---")
-        st.subheader("🔬 Amino Asit Birleşimlerinden Doğan Yapısal Analiz")
-        
-        if not result['reports']:
-            st.info("Standart genetik yapı (Varyasyon tespit edilmedi).")
-        
-        for rep in result['reports']:
-            with st.expander(f"📌 {rep['name']}"):
-                st.write(f"**Biyokimyasal Karşılık:** {rep['desc']}")
-                st.write("---")
-                # Mutasyonun hangi parametreyi değiştirdiğini görselleştir
-                impacts = [f"{k}: {v}" for k, v in plant_info["mutations"][rep['name']].items() if k != "desc"]
-                st.code(f"Etki Alanları: {', '.join(impacts)}")
+# --- ANA PANEL: ANALİZ ---
+col1, col2 = st.columns([1, 1])
 
-        st.success("Analiz Tamamlandı. Bu veriler laboratuvar teorik tavanını temsil etmektedir.")
+with col1:
+    st.subheader("🛠️ Genetik Girdi")
+    plant_choice = st.selectbox("Ürün Seçimi:", ["Domates", "Biber", "Hıyar", "Kabak", "Karpuz", "Kavun", "Patlıcan"])
+    input_type = st.radio("Girdi Tipi:", ["DNA / FASTA", "Amino Asit Dizisi"])
+    raw_data = st.text_area("Sekans Verisini Yapıştırın:", height=200)
+
+    if st.button("Analiz Et"):
+        if input_type == "DNA / FASTA":
+            protein_seq = st.session_state.ai_engine.translate_dna(raw_data)
+        else:
+            protein_seq = raw_data.strip().upper()
+
+        if protein_seq:
+            results = st.session_state.ai_engine.predict_performance(protein_seq, plant_choice)
+            st.session_state.results = results
+            st.session_state.active_seq = protein_seq
+        else:
+            st.error("Geçersiz sekans formatı!")
+
+with col2:
+    st.subheader("📊 Analiz Sonuçları")
+    if 'results' in st.session_state:
+        res = st.session_state.results
+        
+        # Metrik Kartları
+        m1, m2 = st.columns(2)
+        m1.metric("Laboratuvar Potansiyeli (Brix)", f"{res['theory']['Brix']}")
+        m2.metric("Laboratuvar Potansiyeli (Verim)", f"{res['theory']['Verim']}")
+        
+        if res['field_ai']:
+            st.warning(f"🎯 Saha Performans Tahmini (AI): {res['field_ai']}")
+        else:
+            st.info("💡 Saha tahmini için sol taraftan modelinizi eğitin.")
+
+        # Detaylı Amino Asit Raporu
+        with st.expander("🔬 Amino Asit Kompozisyon Analizi"):
+            st.write(f"**İşlenen Protein Dizisi:** {st.session_state.active_seq[:50]}...")
+            st.json(res['metrics'])
+            st.write("Bu frekanslar, bitkinin şeker taşıma (Brix) ve yapısal büyüme (Vigor) kapasitesini belirler.")
