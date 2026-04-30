@@ -1,57 +1,47 @@
 import streamlit as st
-import numpy as np
 from biovalent_algo import BiovalentEngine
 
-# Sayfa konfigürasyonu
-st.set_page_config(page_title="Biovalent AI | Biochemical Labs", layout="wide")
+st.set_page_config(page_title="Biovalent AI | Biyokimyasal Analiz", layout="wide")
 
-# HATA ÇÖZÜMÜ: Engine nesnesini session_state içinde güvenli bir şekilde başlatıyoruz
 if 'engine' not in st.session_state:
     st.session_state.engine = BiovalentEngine()
 
-st.title("🛡️ Biovalent AI: Biyokimyasal Islah Karar Destek")
-st.markdown("---")
+st.title("🛡️ Biovalent AI: Biyokimyasal Islah ve Hücre Analizi")
+st.markdown("Bitki genetiğindeki amino asit değişimlerinin fenotip üzerindeki tüm etkilerini hesaplayın.")
 
 # 1. BİTKİ SEÇİMİ
-# st.session_state.engine'in varlığından emin olduğumuz için listeyi çekebiliriz
-plant_list = list(st.session_state.engine.PLANT_DB.keys())
-selected_plant = st.selectbox("Çalışılacak Bitki Türünü Seçin:", plant_list)
-
+selected_plant = st.selectbox("Çalışılacak Bitki Türünü Seçin:", list(st.session_state.engine.PLANT_DB.keys()))
 plant_info = st.session_state.engine.PLANT_DB[selected_plant]
 
-# 2. AMİNO ASİT / MUTASYON SEÇİMİ
-st.subheader(f"🧬 {selected_plant} İçin Tanımlı Protein Değişimleri")
-st.write("Aday tohumun sahip olduğu genetik/amino asit değişimlerini işaretleyin:")
-
+# 2. AMİNO ASİT DEĞİŞİMLERİ GİRDİSİ
+st.subheader("🧬 Amino Asit ve Protein Değişimleri")
 possible_mutations = list(plant_info["mutations"].keys())
-selected_mutations = st.multiselect("Protein & Amino Asit Değişimleri:", possible_mutations)
+selected_mutations = st.multiselect("Tohumda Tespit Edilen Değişimler:", possible_mutations)
 
-if st.button("Hücre ve Verim Analizini Başlat"):
-    result = st.session_state.engine.analyze_biochemical_profile(selected_plant, selected_mutations)
+if st.button("Tam Analizi Başlat"):
+    result = st.session_state.engine.run_biochemical_analysis(selected_plant, selected_mutations)
     
     if result:
-        # ÖZET SKORLAR
-        c1, c2 = st.columns(2)
-        with c1:
-            st.metric("Tahmini Kalite (Brix/Protein)", f"{result['final_brix']}")
-        with c2:
-            st.metric("Tahmini Verim Potansiyeli", f"{result['final_yield']}")
+        # 3. TÜM VERİLERİN ÇIKARTILMASI (METRİKLER)
+        st.subheader("📊 Tahmini Tohum Performans Kartı")
+        cols = st.columns(len(result['stats']))
+        
+        for i, (param, val) in enumerate(result['stats'].items()):
+            cols[i].metric(label=param, value=f"{round(val, 2)}")
 
-        # BURSA GEN YORUMLAMA RAPORU
+        # 4. PROTEİN VE HÜCRE ANALİZ RAPORU
         st.markdown("---")
-        st.subheader("📋 Bursa Gen Yorumlama / Teknik Rapor")
+        st.subheader("🔬 Amino Asit Birleşimlerinden Doğan Yapısal Analiz")
         
         if not result['reports']:
-            st.warning("Herhangi bir spesifik mutasyon seçilmedi. Bitki standart potansiyelinde görünüyor.")
+            st.info("Standart genetik yapı (Varyasyon tespit edilmedi).")
         
         for rep in result['reports']:
-            with st.chat_message("assistant"):
-                st.write(f"**Mutasyon:** {rep['name']}")
-                st.write(f"**Biyokimyasal Analiz:** {rep['desc']}")
-                st.write(f"**Etki Katsayısı:** `{'+' if rep['impact'] > 0 else ''}{rep['impact']}`")
-                
-                # Dinamik yorumlama kısmı
-                if "brix" in rep['name'].lower() or "asn" in rep['name'].lower():
-                    st.info("Bilgi: Hücre çeperindeki invertaz aktivitesi arttığı için şeker taşıma kapasitesi optimize edildi.")
-                elif "tolerance" in rep['name'].lower() or "hsp" in rep['name'].lower():
-                    st.success("Bilgi: Protein katlanma hızı (chaperone activity) arttığı için bitki strese karşı daha dirençli.")
+            with st.expander(f"📌 {rep['name']}"):
+                st.write(f"**Biyokimyasal Karşılık:** {rep['desc']}")
+                st.write("---")
+                # Mutasyonun hangi parametreyi değiştirdiğini görselleştir
+                impacts = [f"{k}: {v}" for k, v in plant_info["mutations"][rep['name']].items() if k != "desc"]
+                st.code(f"Etki Alanları: {', '.join(impacts)}")
+
+        st.success("Analiz Tamamlandı. Bu veriler laboratuvar teorik tavanını temsil etmektedir.")
