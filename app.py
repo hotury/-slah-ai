@@ -1,7 +1,7 @@
-# Streamlit App (streamlit_app.py)
+# Streamlit App (streamlit_app.py) - SYNTAX HATASI DÜZELTİLDİ
 import streamlit as st
 import pandas as pd
-from biovalent_engine import IslahAI  # Yukarıdaki class'ı biovalent_engine.py'ye kaydet
+from biovalent_engine import IslahAI  # biovalent_engine.py dosyasını kaydet
 
 st.set_page_config(page_title="Islah AI v3 - GWAS Kalibrasyonlu", layout="wide")
 
@@ -29,16 +29,21 @@ with st.sidebar:
     if field_data is not None and st.button("🚀 Modeli Saha Verisiyle Eğit"):
         try:
             st.session_state.ai_engine.train_with_field_data(pd.read_csv(field_data))
-            st.success(f"✅ Kalibrasyon tamamlandı! R² Brix: {st.session_state.ai_engine.r2_scores.get('Brix', 0):.2f}")
+            r2_val = st.session_state.ai_engine.r2_scores.get('Brix', 0)
+            st.success(f"✅ Kalibrasyon tamamlandı! R² Brix: {r2_val:.2f}")
         except Exception as e:
-            st.error(f"❌ CSV formatı hatalı: {e}")
+            st.error(f"❌ CSV formatı hatalı: {str(e)}")
 
 col1, col2 = st.columns([1, 1.2])
 
 with col1:
     st.subheader("⚙️ Analiz")
     input_mode = st.radio("Veri:", ["DNA", "Protein"])
-    raw_data = uploaded_file.read().decode("utf-8") if uploaded_file else st.text_area("Sekans:", height=150)
+    raw_data = ""
+    if uploaded_file is not None:
+        raw_data = uploaded_file.read().decode("utf-8")
+    else:
+        raw_data = st.text_area("Sekans:", height=150, value="")
 
     if st.button("🔍 GWAS Fenotip Analizi", type="primary"):
         with st.spinner("GWAS QTL + literatür analizi..."):
@@ -49,26 +54,41 @@ with col1:
                     seq, plant_choice, variety
                 )
                 st.success(f"✅ {len(seq)} AA analiz edildi")
+            else:
+                st.error("❌ Geçerli sekans bulunamadı")
 
 with col2:
     st.subheader("📊 Literatür Kalibrasyonlu Rapor")
-    if 'results' in st.session_state:
+    if 'results' in st.session_state and st.session_state.results:
         res = st.session_state.results
         trained = st.session_state.ai_engine.is_trained
         
-        # Gelişmiş metric gösterimi
+        # SYNTAX HATASI DÜZELTİLDİ - display_gwas_metric fonksiyonu
         def display_gwas_metric(title, data, unit=""):
-            if isinstance(data, dict) and 'r2' in 
-                r2_badge = f" R²:{data['r2']:.2f}"
-                color = "🟢" if data['r2'] > 0.65 else "🟡" if data['r2'] > 0.4 else "🔴"
-                val_color = "green" if "Elite" in data.get('label', '') else "orange" if "Ticari" in data.get('label', '') else "red"
+            if isinstance(data, dict):
+                if 'r2' in 
+                    r2_badge = f" R²:{data['r2']:.2f}"
+                    color = "🟢" if data['r2'] > 0.65 else "🟡" if data['r2'] > 0.4 else "🔴"
+                else:
+                    r2_badge = ""
+                    color = "🟡"
+                
+                val = data['val']
+                label = data.get('label', 'Ticari')
+                val_color = "green" if "Elite" in label else "orange" if "Ticari" in label else "red"
             else:
-                r2_badge, color, val_color = "", "🟡", "orange"
+                val = data
+                label = "Ticari"
+                r2_badge = ""
+                color = "🟡"
+                val_color = "orange"
+                if isinstance(val, dict):
+                    val = val['val']
             
             st.markdown(f"""
             **{title}** {color}: <span style='color:{val_color}; font-size:22px; font-weight:bold;'>
-            {data['val']}{unit}</span>{r2_badge}<br>
-            *{data.get('label', 'Ticari (Literatür)')}*
+            {val}{unit}</span>{r2_badge}<br>
+            *{label}*
             """, unsafe_allow_html=True)
 
         c1, c2 = st.columns(2)
@@ -83,11 +103,22 @@ with col2:
         
         # Kalite göstergesi
         if trained:
-            st.success(f"🎯 **Saha Kalibrasyonlu** R²={st.session_state.ai_engine.r2_scores.get('Brix', 0):.2f}")
+            r2_val = st.session_state.ai_engine.r2_scores.get('Brix', 0)
+            st.success(f"🎯 **Saha Kalibrasyonlu** R²={r2_val:.2f}")
         else:
             st.info("📚 **Literatür Baseline** (Saha verisiyle %50+ iyileşme)")
         
         # QTL detayları
-        st.subheader("🔬 GWAS QTL Skoru")
-        qtl_df = pd.DataFrame(list(st.session_state.metrics.items()))
-        st.dataframe(qtl_df, use_container_width=True)
+        st.subheader("🔬 GWAS QTL & Özellik Skorları")
+        if isinstance(st.session_state.metrics, dict):
+            metrics_df = pd.DataFrame(list(st.session_state.metrics.items()), columns=['Özellik', 'Değer'])
+            st.dataframe(metrics_df, use_container_width=True)
+        else:
+            st.info("Metrics mevcut değil")
+
+# Test sekansı örneği
+with st.expander("🧪 Test İçin Örnek Sekans (Domates Brix QTL)"):
+    st.code("""
+    >Test_Tomato_Elite
+    ATGGCCTACGGCGATGCCGACTAGCTAGCTAGCTAGCTAGC...
+    """, language="fasta")
