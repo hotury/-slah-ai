@@ -1,5 +1,6 @@
 import numpy as np
 from Bio.Seq import Seq
+from sklearn.ensemble import RandomForestRegressor
 
 class IslahAI:
     def __init__(self):
@@ -12,13 +13,15 @@ class IslahAI:
             "Kavun": {"brix": 0.55, "yield": 13.0, "germination": 0.80, "disease": 1.0},
             "Patlıcan": {"brix": 0.30, "yield": 10.0, "germination": 0.70, "disease": 1.3}
         }
+        self.model = None
+        self.is_trained = False
 
     def process_genome_file(self, file_content):
-        """FASTA/TXT içeriğini temizler ve saf sekansı döndürür."""
+        """Dosyadan gelen veriyi temizler (DNA veya Amino Asit fark etmez)."""
         lines = file_content.splitlines()
-        # FASTA başlıklarını (>) ayıkla ve satırları birleştir
+        # FASTA başlıklarını (>) veya yorum satırlarını temizle
         clean_seq = "".join([line.strip() for line in lines if not line.startswith(">")])
-        return clean_seq.upper().replace(" ", "")
+        return clean_seq.upper().replace(" ", "").replace("\n", "")
 
     def translate_dna(self, dna_sequence):
         try:
@@ -30,6 +33,7 @@ class IslahAI:
     def calculate_aa_metrics(self, protein_seq):
         if not protein_seq: return None
         seq_len = len(protein_seq)
+        if seq_len == 0: return None
         return {
             "sugar_index": sum(protein_seq.count(x) for x in "ST") / seq_len,
             "growth_index": sum(protein_seq.count(x) for x in "LIV") / seq_len,
@@ -38,6 +42,22 @@ class IslahAI:
             "energy_index": sum(protein_seq.count(x) for x in "AG") / seq_len,
             "stability_index": sum(protein_seq.count(x) for x in "YF") / seq_len
         }
+
+    def train_field_model(self, df):
+        """Şirketin saha verileriyle AI'yı eğitir."""
+        try:
+            X = []
+            for seq in df['Protein_Seq']:
+                metrics = self.calculate_aa_metrics(seq)
+                X.append(list(metrics.values()))
+            
+            y = df['Saha_Sonuc'].values
+            self.model = RandomForestRegressor(n_estimators=100, random_state=42)
+            self.model.fit(X, y)
+            self.is_trained = True
+            return True
+        except:
+            return False
 
     def predict_all_parameters(self, protein_seq, plant_type):
         m = self.calculate_aa_metrics(protein_seq)
