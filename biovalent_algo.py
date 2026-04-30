@@ -1,81 +1,73 @@
-import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestRegressor
 
 class BiovalentEngine:
     def __init__(self):
-        # 🧬 PROTEİN SÖZLÜĞÜ: SNP'den Amino Asit Değişimine ve Biyolojik Etkiye Geçiş
-        # Bu kısım senin "+1 Tarım" vizyonunla akademik olarak dolacak yerdir.
-        self.GENE_MAP = {
-            0: {"gene": "LIN5", "protein": "Apoplastic Invertase", "aa_change": "Asn -> Asp", "effect": "brix", "power": 0.4},
-            4: {"gene": "ALMT9", "protein": "Malate Transporter", "aa_change": "Glu -> Val", "effect": "acidity", "power": -0.15},
-            10: {"gene": "FW2.2", "protein": "Cell Division Regulator", "aa_change": "Cys -> Tyr", "effect": "weight", "power": 12.0},
-            18: {"gene": "HSP70", "protein": "Heat Shock Protein", "aa_change": "Pro -> Leu", "effect": "tolerance", "power": 0.20}
-        }
-        
-        self.model_brix = RandomForestRegressor(n_estimators=100, random_state=42)
-        self.model_yield = RandomForestRegressor(n_estimators=100, random_state=42)
-        self.is_trained = False
-
-    def calculate_biochemical_potential(self, snp_array):
-        """SNP'den Amino Asit ve Hücre Fonksiyonu Yorumlaması Yapan Motor"""
-        results = {
-            "lab_brix": 5.0,
-            "lab_yield": 70.0,
-            "tolerance_score": 1.0,
-            "protein_reports": []
-        }
-
-        for idx, val in enumerate(snp_array):
-            if idx in self.GENE_MAP and val > 0:
-                gene_info = self.GENE_MAP[idx]
-                impact = gene_info["power"] * val
-                
-                # Amino Asit Seviyesinde Yorumlama
-                report = {
-                    "gene": gene_info["gene"],
-                    "protein": gene_info["protein"],
-                    "change": gene_info["aa_change"],
-                    "impact": impact
+        # 🌿 BİTKİ ÇEŞİTLİLİĞİ VE BİYOLOJİK KÜTÜPHANE
+        # Burası bitki bazlı "Anayasa" kütüphanesidir.
+        self.PLANT_DB = {
+            "Domates (Solanum lycopersicum)": {
+                "base_brix": 4.5, "base_yield": 80.0,
+                "mutations": {
+                    "LIN5 (Asn -> Asp)": {"effect": "brix", "impact": 0.8, "desc": "Meyve etinde şeker birikimini hızlandırır."},
+                    "ALMT9 (Glu -> Val)": {"effect": "acidity", "impact": -0.12, "desc": "Malik asit taşımasını azaltarak lezzeti yumuşatır."},
+                    "HSP70 (Pro -> Leu)": {"effect": "tolerance", "impact": 0.3, "desc": "Isı şoku protein stabilitesini artırır."}
                 }
-                
-                # Etkiyi ilgili parametreye işle
-                if gene_info["effect"] == "brix":
-                    results["lab_brix"] += impact
-                elif gene_info["effect"] == "weight":
-                    results["lab_yield"] += (impact * 5) # Ağırlık verimi artırır
-                elif gene_info["effect"] == "acidity":
-                    results["lab_brix"] *= (1 + impact) # Asidite lezzeti (brix algısını) bozar
-                elif gene_info["effect"] == "tolerance":
-                    results["tolerance_score"] += impact
-
-                results["protein_reports"].append(report)
-
-        return results
-
-    def predict_hybrid(self, snp_array):
-        # 1. Biyokimyasal Analiz (AA Tabanlı)
-        bio_data = self.calculate_biochemical_potential(snp_array)
-        
-        # 2. Saha Kalibrasyonu (Eğer eğitilmişse AI devreye girer)
-        if self.is_trained:
-            field_brix = self.model_brix.predict([snp_array])[0]
-            field_yield = self.model_yield.predict([snp_array])[0]
-        else:
-            # Saha verisi yoksa biyokimyasal potansiyelin %75'ini gerçekçi kabul et
-            field_brix = bio_data["lab_brix"] * 0.75
-            field_yield = bio_data["lab_yield"] * 0.75
-            
-        return {
-            "theory": bio_data,
-            "field": {"brix": round(field_brix, 2), "yield": round(field_yield, 2)}
+            },
+            "Biber (Capsicum annuum)": {
+                "base_brix": 6.0, "base_yield": 40.0,
+                "mutations": {
+                    "Pun1 (Gln -> Stop)": {"effect": "pungency", "impact": -1.0, "desc": "Kapsaisin sentezini durdurarak biberi tatlılaştırır."},
+                    "Lcyb (Ile -> Val)": {"effect": "color", "impact": 0.5, "desc": "Likopen döngüsünü hızlandırarak rengi koyulaştırır."}
+                }
+            },
+            "Buğday (Triticum aestivum)": {
+                "base_brix": 0, "base_yield": 350.0, # Kg/Dekar
+                "mutations": {
+                    "Gpc-B1 (Trp -> Arg)": {"effect": "protein", "impact": 0.15, "desc": "Tanedeki protein ve demir içeriğini artırır."},
+                    "Rht-B1 (Point Mut)": {"effect": "height", "impact": -0.3, "desc": "Yarı bodur yapı oluşturarak yatmayı engeller."}
+                }
+            },
+            "Mısır (Zea mays)": {
+                "base_brix": 3.0, "base_yield": 1200.0,
+                "mutations": {
+                    "Opaque-2 (Lys+ Gen)": {"effect": "protein", "impact": 0.25, "desc": "Lizin ve Triptofan amino asit miktarını ikiye katlar."},
+                    "Bt-Cry1Ab": {"effect": "resistance", "impact": 0.9, "desc": "Mısır kurduna karşı biyolojik toksin sentezler."}
+                }
+            }
         }
 
-    def train_field_ai(self, df):
-        feature_cols = [col for col in df.columns if col not in ['Field_Brix', 'Field_Yield']]
-        X = df[feature_cols].values
-        y_b = df['Field_Brix'].values
-        y_y = df['Field_Yield'].values
-        self.model_brix.fit(X, y_b)
-        self.model_yield.fit(X, y_y)
-        self.is_trained = True
+    def analyze_biochemical_profile(self, plant_name, selected_mutations):
+        """Amino Asit değişimlerini alıp bitkiyi yorumlayan motor."""
+        plant_data = self.PLANT_DB.get(plant_name)
+        if not plant_data:
+            return None
+
+        # Temel Değerler
+        current_brix = plant_data["base_brix"]
+        current_yield = plant_data["base_yield"]
+        reports = []
+        
+        # Seçilen Amino Asit Değişimlerini İşle
+        for mut_name in selected_mutations:
+            mut_info = plant_data["mutations"].get(mut_name)
+            if mut_info:
+                impact = mut_info["impact"]
+                
+                if mut_info["effect"] == "brix":
+                    current_brix += impact
+                elif mut_info["effect"] == "yield":
+                    current_yield *= (1 + impact)
+                elif mut_info["effect"] == "acidity":
+                    current_brix *= (1 + impact)
+                
+                reports.append({
+                    "name": mut_name,
+                    "desc": mut_info["desc"],
+                    "impact": impact
+                })
+
+        return {
+            "final_brix": round(current_brix, 2),
+            "final_yield": round(current_yield, 2),
+            "reports": reports
+        }
