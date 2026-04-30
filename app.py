@@ -1,8 +1,11 @@
 import streamlit as st
+import numpy as np
 from biovalent_algo import BiovalentEngine
 
+# Sayfa konfigürasyonu
 st.set_page_config(page_title="Biovalent AI | Biochemical Labs", layout="wide")
 
+# HATA ÇÖZÜMÜ: Engine nesnesini session_state içinde güvenli bir şekilde başlatıyoruz
 if 'engine' not in st.session_state:
     st.session_state.engine = BiovalentEngine()
 
@@ -10,7 +13,10 @@ st.title("🛡️ Biovalent AI: Biyokimyasal Islah Karar Destek")
 st.markdown("---")
 
 # 1. BİTKİ SEÇİMİ
-selected_plant = st.selectbox("Çalışılacak Bitki Türünü Seçin:", list(st.session_state.engine.PLANT_DB.keys()))
+# st.session_state.engine'in varlığından emin olduğumuz için listeyi çekebiliriz
+plant_list = list(st.session_state.engine.PLANT_DB.keys())
+selected_plant = st.selectbox("Çalışılacak Bitki Türünü Seçin:", plant_list)
+
 plant_info = st.session_state.engine.PLANT_DB[selected_plant]
 
 # 2. AMİNO ASİT / MUTASYON SEÇİMİ
@@ -44,8 +50,8 @@ if st.button("Hücre ve Verim Analizini Başlat"):
                 st.write(f"**Biyokimyasal Analiz:** {rep['desc']}")
                 st.write(f"**Etki Katsayısı:** `{'+' if rep['impact'] > 0 else ''}{rep['impact']}`")
                 
-                # Biyolojik derinlik yorumu ekle
-                if "brix" in rep['name'].lower() or "Asn" in rep['name']:
-                    st.info("Hücre çeperindeki invertaz aktivitesi arttığı için şeker taşıma kapasitesi optimize edildi.")
-                elif "tolerance" in rep['name'].lower():
-                    st.success("Protein katlanma hızı (chaperone activity) arttığı için bitki strese karşı daha dirençli.")
+                # Dinamik yorumlama kısmı
+                if "brix" in rep['name'].lower() or "asn" in rep['name'].lower():
+                    st.info("Bilgi: Hücre çeperindeki invertaz aktivitesi arttığı için şeker taşıma kapasitesi optimize edildi.")
+                elif "tolerance" in rep['name'].lower() or "hsp" in rep['name'].lower():
+                    st.success("Bilgi: Protein katlanma hızı (chaperone activity) arttığı için bitki strese karşı daha dirençli.")
