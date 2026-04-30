@@ -1,52 +1,51 @@
 import streamlit as st
-import numpy as np
-import pandas as pd
 from biovalent_algo import BiovalentEngine
 
-st.set_page_config(page_title="Biovalent AI | Protein-Aware Breeding", layout="wide")
+st.set_page_config(page_title="Biovalent AI | Biochemical Labs", layout="wide")
 
 if 'engine' not in st.session_state:
     st.session_state.engine = BiovalentEngine()
 
-st.title("🧬 Biovalent AI: Amino Asit Tabanlı Islah Analizi")
+st.title("🛡️ Biovalent AI: Biyokimyasal Islah Karar Destek")
 st.markdown("---")
 
-# 1. ÜRÜN SEÇİMİ (Biyolojik Anayasa)
-col_a, col_b = st.columns(2)
-product = col_a.selectbox("Çalışılacak Ürün:", ["Domates (Solanum lycopersicum)", "Biber (Capsicum annuum)"])
-st.info(f"Seçilen ürün için **{product}** genetik referans kütüphanesi yüklendi.")
+# 1. BİTKİ SEÇİMİ
+selected_plant = st.selectbox("Çalışılacak Bitki Türünü Seçin:", list(st.session_state.engine.PLANT_DB.keys()))
+plant_info = st.session_state.engine.PLANT_DB[selected_plant]
 
-# 2. GENETİK GİRDİ
-st.subheader("🔬 Aday Tohum Analizi")
-raw_dna = st.text_input("SNP Dizilimi (20 Adet):", "2,0,1,0,2,1,0,1,0,0,2,1,0,0,2,1,0,0,2,1")
+# 2. AMİNO ASİT / MUTASYON SEÇİMİ
+st.subheader(f"🧬 {selected_plant} İçin Tanımlı Protein Değişimleri")
+st.write("Aday tohumun sahip olduğu genetik/amino asit değişimlerini işaretleyin:")
 
-if st.button("Hücre Seviyesinde Analiz Et"):
-    dna_vec = np.array([int(x.strip()) for x in raw_dna.split(",")])
-    res = st.session_state.engine.predict_hybrid(dna_vec)
+possible_mutations = list(plant_info["mutations"].keys())
+selected_mutations = st.multiselect("Protein & Amino Asit Değişimleri:", possible_mutations)
+
+if st.button("Hücre ve Verim Analizini Başlat"):
+    result = st.session_state.engine.analyze_biochemical_profile(selected_plant, selected_mutations)
     
-    # SONUÇ GÖSTERİMİ
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Tahmini Brix", f"{res['field']['brix']}")
-    c2.metric("Tahmini Verim", f"{res['field']['yield']} Ton/Ha")
-    c3.metric("Tolerans Katsayısı", f"{round(res['theory']['tolerance_score'], 2)}")
+    if result:
+        # ÖZET SKORLAR
+        c1, c2 = st.columns(2)
+        with c1:
+            st.metric("Tahmini Kalite (Brix/Protein)", f"{result['final_brix']}")
+        with c2:
+            st.metric("Tahmini Verim Potansiyeli", f"{result['final_yield']}")
 
-    # 🧬 BURSA GEN YORUMLAMA (Hücre Analizi Bölümü)
-    st.subheader("📂 Bursa Gen Yorumlama Raporu (AA Değişim Analizi)")
-    
-    for report in res['theory']['protein_reports']:
-        with st.expander(f"📌 Gen: {report['gene']} | Protein: {report['protein']}"):
-            st.write(f"**Amino Asit Değişimi:** `{report['change']}`")
-            st.write(f"**Biyokimyasal Etki:** Bu değişim proteinin üç boyutlu yapısında stabiliteyi değiştirerek fenotipte **{report['impact']:.2f}** birimlik bir fark yaratmaktadır.")
-            if "Tolerance" in report['protein'] or report['impact'] > 0.3:
-                st.success("Bu değişim bitkinin çevresel stres direncini pozitif yönde etkiler.")
-
-# 3. AI EĞİTİM (Gelecek İçin)
-with st.sidebar:
-    st.header("⚙️ AI Kalibrasyonu")
-    st.write("Saha veriniz varsa buraya yükleyerek biyokimyasal modeli tarlanıza özel eğitebilirsiniz.")
-    uploaded = st.file_uploader("Saha Verisi (CSV)", type="csv")
-    if uploaded:
-        df = pd.read_csv(uploaded)
-        if st.button("Modeli Eğit"):
-            st.session_state.engine.train_field_ai(df)
-            st.success("AI, Amino Asit verilerini sahanızla eşleştirdi!")
+        # BURSA GEN YORUMLAMA RAPORU
+        st.markdown("---")
+        st.subheader("📋 Bursa Gen Yorumlama / Teknik Rapor")
+        
+        if not result['reports']:
+            st.warning("Herhangi bir spesifik mutasyon seçilmedi. Bitki standart potansiyelinde görünüyor.")
+        
+        for rep in result['reports']:
+            with st.chat_message("assistant"):
+                st.write(f"**Mutasyon:** {rep['name']}")
+                st.write(f"**Biyokimyasal Analiz:** {rep['desc']}")
+                st.write(f"**Etki Katsayısı:** `{'+' if rep['impact'] > 0 else ''}{rep['impact']}`")
+                
+                # Biyolojik derinlik yorumu ekle
+                if "brix" in rep['name'].lower() or "Asn" in rep['name']:
+                    st.info("Hücre çeperindeki invertaz aktivitesi arttığı için şeker taşıma kapasitesi optimize edildi.")
+                elif "tolerance" in rep['name'].lower():
+                    st.success("Protein katlanma hızı (chaperone activity) arttığı için bitki strese karşı daha dirençli.")
