@@ -1,52 +1,40 @@
-# ISLAH_AI_APP.py - Clean Professional Interface
+# ISLAH_AI_APP.py - Clean & Full Feature
 import streamlit as st
-from BIYOLOJIK_BEYIN import BiyolojikBeyin
+from BIYOLOJIK_BEYIN import BiyolojikBeyin, beyin
 
 st.set_page_config(page_title="IslahAI Elite", layout="wide")
 
-# Header (temiz)
 st.title("🧬 IslahAI Elite")
-st.markdown("*Multi-Crop DNA Phenotyping*")
+st.markdown("**DNA Phenotyping Platform**")
 
 # Sidebar
-with st.sidebar:
-    st.header("Bitki Seç")
-    crop = st.selectbox("Ürün:", ['Domates', 'Biber', 'Hıyar', 'Kabak', 'Karpuz', 'Kavun'])
-    
-    st.header("Custom Train")
-    csv_file = st.file_uploader("CSV Eğit (snp_profile,Brix,Verim)", type='csv')
-    if csv_file and st.button("Şirket Modeli Eğit"):
-        result = beyin.train_custom(csv_file)
-        st.success(result)
-    
-    st.markdown("---")
-    st.caption("DNA → SNP → Phenotype")
+st.sidebar.header("Bitki")
+crop = st.sidebar.selectbox("Seç:", ['Domates', 'Biber', 'Hıyar', 'Kabak', 'Karpuz', 'Kavun'])
 
-# Global beyin init
-if 'beyin' not in st.session_state:
-    st.session_state.beyin = BiyolojikBeyin(crop)
+# Lazy beyin init
+if 'beyin_instance' not in st.session_state:
+    st.session_state.beyin_instance = BiyolojikBeyin(crop)
 
-beyin = st.session_state.beyin
-beyin.crop_type = crop  # Dynamic crop
+beyin = st.session_state.beyin_instance
+beyin.crop_type = crop
 
-col1, col2 = st.columns([1, 1.4])
+col1, col2 = st.columns([1, 1.5])
 
 with col1:
-    st.header("DNA Analizi")
-    dna_file = st.file_uploader("DNA/FASTA", type=['fasta','txt'])
-    
+    st.header("DNA")
+    dna_file = st.file_uploader("FASTA/DNA")
     dna = ""
     if dna_file:
         dna = dna_file.read().decode()
     else:
-        dna = st.text_area("DNA:", height=250, 
-            value="ATGGAAGAAGAACCGCTTTTGGTGGCGCTCTGCTGCTGCTGCC" * 25)
+        dna = st.text_area("DNA:", height=200, 
+            value="ATGGAAGAAGAACCGCTTTTGGTGGCGCTCTGCTGCTGCTGCC" * 20)
     
-    if st.button("🔍 Phenotype Tahmin", type="primary"):
-        if len(dna) > 50:
-            with st.spinner("SNP extraction..."):
-                result = beyin.predict(dna)
-                st.session_state.result = result
+    if st.button("🔍 Full Phenotype", type="primary"):
+        if len(dna) > 100:
+            result = beyin.predict_full(dna)
+            st.session_state.result = result
+            st.rerun()
 
 with col2:
     if 'result' in st.session_state:
@@ -54,16 +42,17 @@ with col2:
         
         c1, c2 = st.columns(2)
         with c1:
-            st.metric("🍅 Brix", res['Brix'])
-            st.metric("🌾 Verim", f"{res['Verim']} kg")
+            st.metric("Brix", res['Brix'])
+            st.metric("Verim", res['Verim'])
+            st.metric("Çimlenme", res['Cimlenme'])
         with c2:
-            st.metric("🔬 Glu %", res['Glu'])
-            st.metric("🎯 SNP Hit", res['SNPHit'])
+            st.metric("Bağışıklık", res['Bagisiklik'])
+            st.metric("Raf Ömrü", res['RafOmru'])
         
-        st.info(f"Model: {res['Model']}")
+        st.metric("Glu AA", res['Glu'])
+        st.metric("SNP Hit", res['SNP_Hit'])
         
-        with st.expander("Detay"):
+        with st.expander("Tam Rapor"):
             st.json(res)
 
-st.markdown("---")
-st.caption("Professional DNA Phenotyping Platform")
+st.caption("Multi-Crop DNA Analysis")
