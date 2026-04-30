@@ -17,9 +17,8 @@ class IslahAI:
         self.is_trained = False
 
     def process_genome_file(self, file_content):
-        """Dosyadan gelen veriyi temizler (DNA veya Amino Asit fark etmez)."""
+        """DNA veya Amino Asit fark etmeksizin temizlik yapar."""
         lines = file_content.splitlines()
-        # FASTA başlıklarını (>) veya yorum satırlarını temizle
         clean_seq = "".join([line.strip() for line in lines if not line.startswith(">")])
         return clean_seq.upper().replace(" ", "").replace("\n", "")
 
@@ -27,8 +26,7 @@ class IslahAI:
         try:
             coding_dna = Seq(dna_sequence)
             return str(coding_dna.translate(to_stop=True))
-        except:
-            return None
+        except: return None
 
     def calculate_aa_metrics(self, protein_seq):
         if not protein_seq: return None
@@ -43,8 +41,8 @@ class IslahAI:
             "stability_index": sum(protein_seq.count(x) for x in "YF") / seq_len
         }
 
-    def train_field_model(self, df):
-        """Şirketin saha verileriyle AI'yı eğitir."""
+    def train_with_field_data(self, df):
+        """Saha verileriyle AI modelini eğitir."""
         try:
             X = []
             for seq in df['Protein_Seq']:
@@ -56,8 +54,7 @@ class IslahAI:
             self.model.fit(X, y)
             self.is_trained = True
             return True
-        except:
-            return False
+        except: return False
 
     def predict_all_parameters(self, protein_seq, plant_type):
         m = self.calculate_aa_metrics(protein_seq)
