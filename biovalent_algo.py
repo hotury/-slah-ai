@@ -1,52 +1,75 @@
-class BiovalentEngine:
+import numpy as np
+import pandas as pd
+from Bio.Seq import Seq
+from sklearn.ensemble import RandomForestRegressor
+
+class IslahAI:
     def __init__(self):
-        # 🌿 BİTKİ ANAYASALARI VE KOMPLEKS PARAMETRELER
-        self.PLANT_DB = {
-            "Domates (Solanum lycopersicum)": {
-                "base_stats": {
-                    "Brix": 4.5, "Verim (Ton/Ha)": 80.0, "Raf Ömrü (Gün)": 10,
-                    "Hastalık Toleransı (%)": 20.0, "Su İhtiyacı (L/Gün)": 5.0, "Hasat Süresi (Gün)": 110
-                },
-                "mutations": {
-                    "LIN5 (Asn -> Asp)": {"Brix": 1.2, "Verim (Ton/Ha)": 5.0, "desc": "Meyve etinde şeker birikimini artırır."},
-                    "ALMT9 (Glu -> Val)": {"Brix": 0.5, "Hastalık Toleransı (%)": 5.0, "desc": "Asidite dengesi üzerinden doku direncini artırır."},
-                    "HSP70 (Pro -> Leu)": {"Hastalık Toleransı (%)": 25.0, "Su İhtiyacı (L/Gün)": -1.0, "desc": "Isı şoku proteini sayesinde kuraklık ve sıcaklık direnci sağlar."},
-                    "PME (Cys -> Tyr)": {"Raf Ömrü (Gün)": 7, "Verim (Ton/Ha)": -2.0, "desc": "Pektin yapısını güçlendirerek meyveyi sertleştirir, raf ömrünü uzatır."},
-                    "Ty-1 (Point Mut)": {"Hastalık Toleransı (%)": 40.0, "Hasat Süresi (Gün)": 5, "desc": "TYLCV virüsüne karşı yüksek direnç sağlar."}
-                }
-            },
-            "Biber (Capsicum annuum)": {
-                "base_stats": {
-                    "Brix": 5.5, "Verim (Ton/Ha)": 35.0, "Raf Ömrü (Gün)": 12,
-                    "Hastalık Toleransı (%)": 15.0, "Su İhtiyacı (L/Gün)": 4.0, "Hasat Süresi (Gün)": 90
-                },
-                "mutations": {
-                    "Pun1 (Gln -> Stop)": {"Brix": 0.8, "desc": "Kapsaisin sentezini durdurur, tatlılık algısını artırır."},
-                    "Lcyb (Ile -> Val)": {"Hastalık Toleransı (%)": 10.0, "desc": "Karotenoid birikimi ile doku stabilitesini artırır."},
-                    "Bs2 (Genetik Mod)": {"Hastalık Toleransı (%)": 50.0, "desc": "Bakteriyel leke hastalığına (Xanthomonas) karşı tam koruma."}
-                }
-            }
+        # Ürün Bazlı Katsayılar (Örn: Domates için şeker katsayısı farklıdır)
+        self.PLANT_CONFIG = {
+            "Domates": {"brix_weight": 0.45, "yield_weight": 12.0, "shelf_weight": 2.5},
+            "Biber": {"brix_weight": 0.35, "yield_weight": 8.0, "shelf_weight": 3.0},
+            "Hıyar": {"brix_weight": 0.20, "yield_weight": 15.0, "shelf_weight": 1.5},
+            # Diğer bitkiler (Kavun, Karpuz vb.) buraya eklenebilir
+        }
+        self.model = None
+        self.is_trained = False
+
+    def translate_dna(self, dna_sequence):
+        """DNA dizisini Protein dizisine çevirir."""
+        try:
+            coding_dna = Seq(dna_sequence.strip().upper())
+            return str(coding_dna.translate(to_stop=True))
+        except:
+            return None
+
+    def calculate_aa_metrics(self, protein_seq):
+        """Amino asit frekanslarından biyokimyasal metrikler üretir."""
+        if not protein_seq: return None
+        
+        seq_len = len(protein_seq)
+        # Kritik AA Grupları
+        sugar_aa = sum(protein_seq.count(x) for x in "ST") # Serin, Treonin (Glikozilasyon)
+        growth_aa = sum(protein_seq.count(x) for x in "LIV") # Hidrofobik (Yapısal güç)
+        stress_aa = sum(protein_seq.count(x) for x in "P") # Prolin (Stres direnci)
+        
+        return {
+            "freq_sugar": sugar_aa / seq_len,
+            "freq_growth": growth_aa / seq_len,
+            "freq_stress": stress_aa / seq_len,
+            "length": seq_len
         }
 
-    def run_biochemical_analysis(self, plant_name, selected_mutations):
-        plant_data = self.PLANT_DB.get(plant_name)
-        if not plant_data: return None
-
-        # Başlangıç değerlerini kopyala
-        final_stats = plant_data["base_stats"].copy()
-        analysis_reports = []
+    def train_field_model(self, df):
+        """Şirketin kendi saha verisiyle AI'yı eğitir."""
+        # Veride 'Protein_Seq' ve 'Saha_Brix' gibi sütunlar beklenir
+        X = []
+        for seq in df['Protein_Seq']:
+            metrics = self.calculate_aa_metrics(seq)
+            X.append(list(metrics.values()))
         
-        # Seçilen her mutasyonun tüm parametreler üzerindeki etkisini topla
-        for mut_name in selected_mutations:
-            mut_info = plant_data["mutations"].get(mut_name)
-            if mut_info:
-                for param, value in mut_info.items():
-                    if param != "desc":
-                        final_stats[param] += value
-                
-                analysis_reports.append({
-                    "name": mut_name,
-                    "desc": mut_info["desc"]
-                })
+        y = df['Saha_Sonuc'].values
+        self.model = RandomForestRegressor(n_estimators=100, random_state=42)
+        self.model.fit(X, y)
+        self.is_trained = True
 
-        return {"stats": final_stats, "reports": analysis_reports}
+    def predict_performance(self, protein_seq, plant_type):
+        """Teorik potansiyel vs Saha performansı karşılaştırması."""
+        metrics = self.calculate_aa_metrics(protein_seq)
+        cfg = self.PLANT_CONFIG.get(plant_type, self.PLANT_CONFIG["Domates"])
+        
+        # 1. Laboratuvar (Teorik) Hesaplama
+        theory_brix = 4.0 + (metrics["freq_sugar"] * 20 * cfg["brix_weight"])
+        theory_yield = 50.0 + (metrics["freq_growth"] * 100 * cfg["yield_weight"] / 10)
+        
+        # 2. AI (Saha) Tahmini
+        field_prediction = None
+        if self.is_trained:
+            features = np.array(list(metrics.values())).reshape(1, -1)
+            field_prediction = self.model.predict(features)[0]
+        
+        return {
+            "theory": {"Brix": round(theory_brix, 2), "Verim": round(theory_yield, 2)},
+            "field_ai": round(field_prediction, 2) if field_prediction else None,
+            "metrics": metrics
+        }
