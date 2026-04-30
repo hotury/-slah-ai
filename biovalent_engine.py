@@ -4,7 +4,7 @@ from sklearn.ensemble import RandomForestRegressor
 
 class IslahAI:
     def __init__(self):
-        # Bitki bazlı ağırlık katsayıları
+        # Ürün bazlı katsayılar
         self.PLANT_CONFIG = {
             "Domates": {"brix": 0.45, "yield": 12.0, "germination": 0.8, "disease": 1.2},
             "Biber": {"brix": 0.35, "yield": 8.0, "germination": 0.7, "disease": 1.5},
@@ -19,37 +19,41 @@ class IslahAI:
 
     def translate_dna(self, dna_sequence):
         try:
-            coding_dna = Seq(dna_sequence.strip().upper().replace("\n", "").replace(" ", ""))
+            # Temizlik: Boşluk, alt satır ve FASTA başlıklarını (>) temizle
+            clean_dna = "".join([line for line in dna_sequence.splitlines() if not line.startswith(">")])
+            clean_dna = clean_dna.strip().upper().replace(" ", "")
+            coding_dna = Seq(clean_dna)
             return str(coding_dna.translate(to_stop=True))
         except: return None
 
     def calculate_aa_metrics(self, protein_seq):
         if not protein_seq: return None
         seq_len = len(protein_seq)
+        if seq_len == 0: return None
         
-        # Frekans Analizi (Her grup farklı bir özelliği temsil eder)
         metrics = {
-            "sugar_index": sum(protein_seq.count(x) for x in "ST") / seq_len,   # Brix
-            "growth_index": sum(protein_seq.count(x) for x in "LIV") / seq_len, # Verim & Vigor
-            "stress_index": sum(protein_seq.count(x) for x in "P") / seq_len,   # Tolerans
-            "defense_index": sum(protein_seq.count(x) for x in "RK") / seq_len, # Hastalık Dayanımı
-            "energy_index": sum(protein_seq.count(x) for x in "AG") / seq_len,  # Çimlenme Gücü
-            "stability_index": sum(protein_seq.count(x) for x in "YF") / seq_len # Raf Ömrü
+            "sugar_index": sum(protein_seq.count(x) for x in "ST") / seq_len,
+            "growth_index": sum(protein_seq.count(x) for x in "LIV") / seq_len,
+            "stress_index": sum(protein_seq.count(x) for x in "P") / seq_len,
+            "defense_index": sum(protein_seq.count(x) for x in "RK") / seq_len,
+            "energy_index": sum(protein_seq.count(x) for x in "AG") / seq_len,
+            "stability_index": sum(protein_seq.count(x) for x in "YF") / seq_len
         }
         return metrics
 
     def predict_all_parameters(self, protein_seq, plant_type):
         m = self.calculate_aa_metrics(protein_seq)
+        if not m: return None, None
         cfg = self.PLANT_CONFIG.get(plant_type, self.PLANT_CONFIG["Domates"])
         
-        # Formüller (Teorik Potansiyel Hesaplama)
+        # Anahtar isimlerini standartlaştırıyoruz
         results = {
-            "Brix (Şeker Değeri)": round(4.0 + (m["sugar_index"] * 25 * cfg["brix"]), 2),
-            "Verim Potansiyeli": round(50 + (m["growth_index"] * 120 * cfg["yield"] / 10), 2),
-            "Çimlenme Gücü (%)": round(70 + (m["energy_index"] * 30 * cfg["germination"]), 2),
-            "Hastalık Dayanımı (%)": round(20 + (m["defense_index"] * 60 * cfg["disease"]), 2),
-            "Stres Toleransı (0-10)": round(m["stress_index"] * 50, 2),
-            "Raf Ömrü (Gün)": round(5 + (m["stability_index"] * 40), 2),
-            "Vigor (Gelişim Hızı)": round(1 + (m["growth_index"] * 9), 2)
+            "Brix": round(4.0 + (m["sugar_index"] * 25 * cfg["brix"]), 2),
+            "Verim": round(50 + (m["growth_index"] * 120 * cfg["yield"] / 10), 2),
+            "Cimlenme": round(70 + (m["energy_index"] * 30 * cfg["germination"]), 2),
+            "Hastalik": round(20 + (m["defense_index"] * 60 * cfg["disease"]), 2),
+            "Stres": round(m["stress_index"] * 50, 2),
+            "RafOmru": round(5 + (m["stability_index"] * 40), 2),
+            "Vigor": round(1 + (m["growth_index"] * 9), 2)
         }
         return results, m
