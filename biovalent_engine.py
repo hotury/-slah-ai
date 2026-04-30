@@ -1,10 +1,8 @@
 import numpy as np
 from Bio.Seq import Seq
-from sklearn.ensemble import RandomForestRegressor
 
 class IslahAI:
     def __init__(self):
-        # Ürün bazlı katsayılar
         self.PLANT_CONFIG = {
             "Domates": {"brix": 0.45, "yield": 12.0, "germination": 0.8, "disease": 1.2},
             "Biber": {"brix": 0.35, "yield": 8.0, "germination": 0.7, "disease": 1.5},
@@ -14,32 +12,25 @@ class IslahAI:
             "Kavun": {"brix": 0.55, "yield": 13.0, "germination": 0.80, "disease": 1.0},
             "Patlıcan": {"brix": 0.30, "yield": 10.0, "germination": 0.70, "disease": 1.3}
         }
-        self.model = None
-        self.is_trained = False
 
     def process_genome_file(self, file_content):
-        """FASTA veya TXT formatındaki genetik haritayı temizler."""
+        """FASTA/TXT içeriğini temizler ve saf sekansı döndürür."""
         lines = file_content.splitlines()
-        # FASTA başlıklarını (>) ve boş satırları ayıkla
+        # FASTA başlıklarını (>) ayıkla ve satırları birleştir
         clean_seq = "".join([line.strip() for line in lines if not line.startswith(">")])
         return clean_seq.upper().replace(" ", "")
 
     def translate_dna(self, dna_sequence):
-        """Temizlenmiş DNA'yı Proteine çevirir."""
         try:
             coding_dna = Seq(dna_sequence)
-            # Stop kodonuna kadar çevir
             return str(coding_dna.translate(to_stop=True))
-        except Exception as e:
+        except:
             return None
 
     def calculate_aa_metrics(self, protein_seq):
         if not protein_seq: return None
         seq_len = len(protein_seq)
-        if seq_len == 0: return None
-        
-        # Amino Asit Grupları Frekans Analizi
-        metrics = {
+        return {
             "sugar_index": sum(protein_seq.count(x) for x in "ST") / seq_len,
             "growth_index": sum(protein_seq.count(x) for x in "LIV") / seq_len,
             "stress_index": sum(protein_seq.count(x) for x in "P") / seq_len,
@@ -47,7 +38,6 @@ class IslahAI:
             "energy_index": sum(protein_seq.count(x) for x in "AG") / seq_len,
             "stability_index": sum(protein_seq.count(x) for x in "YF") / seq_len
         }
-        return metrics
 
     def predict_all_parameters(self, protein_seq, plant_type):
         m = self.calculate_aa_metrics(protein_seq)
