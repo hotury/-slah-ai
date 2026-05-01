@@ -1,58 +1,64 @@
-# ISLAH_AI_APP.py - Clean & Full Feature
 import streamlit as st
-from BIYOLOJIK_BEYIN import BiyolojikBeyin, beyin
+from BIYOLOJIK_BEYIN import BiyolojikBeyin
 
-st.set_page_config(page_title="IslahAI Elite", layout="wide")
+st.set_page_config(page_title="Islah AI Elite", layout="wide")
 
-st.title("🧬 IslahAI Elite")
-st.markdown("**DNA Phenotyping Platform**")
+st.title("🧬 Islah AI: Atakan Tohumculuk Ar-Ge")
+st.markdown("---")
 
 # Sidebar
-st.sidebar.header("Bitki")
-crop = st.sidebar.selectbox("Seç:", ['Domates', 'Biber', 'Hıyar', 'Kabak', 'Karpuz', 'Kavun'])
+with st.sidebar:
+    st.header("🔬 Islah Parametreleri")
+    crop = st.selectbox("Ürün Seçiniz:", ['Domates', 'Biber', 'Hıyar', 'Kabak', 'Karpuz', 'Kavun'])
+    st.info("Sistem şu an 'Kural Tabanlı' (Biyolojik Markör) modunda çalışıyor.")
 
-# Lazy beyin init
-if 'beyin_instance' not in st.session_state:
-    st.session_state.beyin_instance = BiyolojikBeyin(crop)
-
-beyin = st.session_state.beyin_instance
-beyin.crop_type = crop
+# Beyin Init
+if 'beyin' not in st.session_state or st.session_state.current_crop != crop:
+    st.session_state.beyin = BiyolojikBeyin(crop)
+    st.session_state.current_crop = crop
 
 col1, col2 = st.columns([1, 1.5])
 
 with col1:
-    st.header("DNA")
-    dna_file = st.file_uploader("FASTA/DNA")
-    dna = ""
-    if dna_file:
-        dna = dna_file.read().decode()
-    else:
-        dna = st.text_area("DNA:", height=200, 
-            value="ATGGAAGAAGAACCGCTTTTGGTGGCGCTCTGCTGCTGCTGCC" * 20)
+    st.subheader("📥 Veri Girişi")
+    dna_input = st.text_area("DNA Sekansını Yapıştırın:", height=300, 
+                             placeholder="ATGC...")
     
-    if st.button("🔍 Full Phenotype", type="primary"):
-        if len(dna) > 100:
-            result = beyin.predict_full(dna)
-            st.session_state.result = result
-            st.rerun()
+    if st.button("🚀 Analizi Başlat", type="primary"):
+        if len(dna_input) > 20:
+            with st.spinner("Biyolojik motifler taranıyor..."):
+                st.session_state.result = st.session_state.beyin.predict(dna_input)
+        else:
+            st.error("Lütfen geçerli bir DNA dizisi girin.")
 
 with col2:
+    st.subheader("📊 Dijital Fenotip Sonuçları")
     if 'result' in st.session_state:
         res = st.session_state.result
         
+        def show_card(title, key, unit=""):
+            data = res[key]
+            val = data['val']
+            label = data['label']
+            color = "green" if "Elite" in label else "orange" if "Ticari" in label else "red"
+            
+            st.markdown(f"""
+            <div style="border:1px solid #ddd; padding:15px; border-radius:10px; margin-bottom:10px; border-left: 5px solid {color}">
+                <small style="color:gray">{title}</small><br>
+                <b style="font-size:24px">{val}{unit}</b><br>
+                <span style="color:{color}; font-size:12px">● {label}</span>
+            </div>
+            """, unsafe_allow_html=True)
+
         c1, c2 = st.columns(2)
         with c1:
-            st.metric("Brix", res['Brix'])
-            st.metric("Verim", res['Verim'])
-            st.metric("Çimlenme", res['Cimlenme'])
+            show_card("Şeker Oranı (Brix)", "Brix")
+            show_card("Toplam Verim Skoru", "Verim")
+            show_card("Tohum Çıkış Gücü", "Cimlenme", "%")
         with c2:
-            st.metric("Bağışıklık", res['Bagisiklik'])
-            st.metric("Raf Ömrü", res['RafOmru'])
-        
-        st.metric("Glu AA", res['Glu'])
-        st.metric("SNP Hit", res['SNP_Hit'])
-        
-        with st.expander("Tam Rapor"):
-            st.json(res)
+            show_card("Bağışıklık Gücü", "Bagisiklik", "%")
+            show_card("Stres Toleransı", "Stres", "%")
+            st.success(f"Analiz Notu: {res['Not']}")
 
-st.caption("Multi-Crop DNA Analysis")
+st.markdown("---")
+st.caption("Bu sistem biyolojik kural setleri üzerinden tahminde bulunur. Kesin sonuçlar için tarla denemeleri ile kalibre edilmelidir.")
