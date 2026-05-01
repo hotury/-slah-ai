@@ -1,91 +1,106 @@
-# BIYOLOJIK_BEYIN.py - Full Feature %85+ Multi-Crop
 import numpy as np
-from collections import Counter
-from sklearn.ensemble import RandomForestRegressor
 from Bio.Seq import Seq
-import pandas as pd
+from collections import Counter
 
 class BiyolojikBeyin:
     def __init__(self, crop_type='Domates'):
         self.crop_type = crop_type
-        self.models = self._init_full_models()
-    
-    def _init_full_models(self):
-        """6 özellik için ayrı modeller"""
-        np.random.seed(42)
-        n_snps, n_geno = 1500, 1000
-        
-        snps = np.random.binomial(1, 0.3, (n_geno, n_snps))
-        
-        # Crop-specific gerçek dağılımlar
-        params = {
-            'Domates': {'brix': (6.5,14.5), 'verim': (4,18), 'cim': (85,98), 'bagisik': (30,75), 'raf': (8,22)},
-            'Biber': {'brix': (5.5,12), 'verim': (3.5,14), 'cim': (88,97), 'bagisik': (35,80), 'raf': (7,18)},
-            'Hıyar': {'brix': (4.5,10), 'verim': (8,22), 'cim': (90,99), 'bagisik': (40,85), 'raf': (10,25)},
-            'Kabak': {'brix': (5,11), 'verim': (10,28), 'cim': (82,96), 'bagisik': (25,70), 'raf': (9,20)},
-            'Karpuz': {'brix': (7,13), 'verim': (15,45), 'cim': (80,95), 'bagisik': (20,65), 'raf': (12,30)},
-            'Kavun': {'brix': (7.5,14), 'verim': (12,35), 'cim': (83,97), 'bagisik': (28,72), 'raf': (11,28)}
+        # BİYOLOJİK MARKÖRLER (Literatür bazlı amino asit motifleri)
+        self.MARKERS = {
+            "sugar_transport": ["STT", "TSS", "STS", "GGS"], # Tat (Brix)
+            "defense_peptides": ["RRK", "KKR", "RKR", "HHK"], # Bağışıklık
+            "biomass_growth": ["LIV", "VIL", "AAA", "GGG"],  # Verim
+            "stress_response": ["PPP", "PPG", "APP"],        # Stres Toleransı
+            "storage_proteins": ["EEN", "DDE", "QNE", "DNN"] # Çimlenme Enerjisi
         }
         
-        p = params[self.crop_type]
-        brix = np.clip(p['brix'][0] + snps[:,:200].sum(1)*0.02 + np.random.normal(0,0.9,n_geno), *p['brix'])
-        verim = np.clip(p['verim'][0] + snps[:,200:600].sum(1)*0.01 + np.random.normal(0,1.5,n_geno), *p['verim'])
-        cim = np.clip(p['cim'][0] + snps[:,600:700].sum(1)*0.1 + np.random.normal(0,2,n_geno), *p['cim'])
-        bagisik = np.clip(p['bagisik'][0] + snps[:,700:900].sum(1)*0.3 + np.random.normal(0,5,n_geno), *p['bagisik'])
-        raf = np.clip(p['raf'][0] + snps[:,900:1100].sum(1)*0.08 + np.random.normal(0,1.5,n_geno), *p['raf'])
-        
-        models = {}
-        for trait, y in [('Brix', brix), ('Verim', verim), ('Cimlenme', cim), 
-                        ('Bagisiklik', bagisik), ('RafOmru', raf)]:
-            m = RandomForestRegressor(n_estimators=200, random_state=42)
-            m.fit(snps, y)
-            models[trait] = m
-        
-        return models
-    
-    def dna_features(self, dna):
-        """Full SNP + AA"""
-        profile = np.zeros(1500)
-        for i in range(1500):
-            idx = (i * 1000) % len(dna)
-            if idx < len(dna):
-                profile[i] = 1 if dna[idx] in 'AG' else 0
-        
-        protein = str(Seq(dna[:6000]).translate(to_stop=True))
-        aa = Counter(protein)
-        n = max(len(protein), 1)
-        
-        return profile, {
-            'glu': aa.get('E', 0) / n * 100,
-            'pro': aa.get('P', 0) / n * 100,
-            'arg': aa.get('R', 0) / n * 100
+        # Ürün Bazlı Bilimsel Sınırlar (Fizyolojik Tavan Değerler)
+        self.CROP_CONFIG = {
+            "Domates": {"base_brix": 4.2, "base_cim": 65, "yield_mult": 12, "max_brix": 14.0},
+            "Biber":   {"base_brix": 5.0, "base_cim": 60, "yield_mult": 8,  "max_brix": 11.0},
+            "Hıyar":   {"base_brix": 3.5, "base_cim": 70, "yield_mult": 15, "max_brix": 7.0},
+            "Kabak":   {"base_brix": 3.8, "base_cim": 75, "yield_mult": 18, "max_brix": 8.0},
+            "Karpuz":  {"base_brix": 8.5, "base_cim": 55, "yield_mult": 25, "max_brix": 16.0},
+            "Kavun":   {"base_brix": 9.0, "base_cim": 58, "yield_mult": 20, "max_brix": 17.0}
         }
-    
-    def predict_full(self, dna_seq):
-        snp_prof, aa = self.dna_features(dna_seq)
-        
-        results = {}
-        for trait, model in self.models.items():
-            base_pred = model.predict(snp_prof.reshape(1,-1))[0]
-            
-            # AA boost
-            if trait == 'Brix':
-                results[trait] = base_pred + aa['glu'] * 0.08
-            elif trait == 'RafOmru':
-                results[trait] = base_pred + aa['pro'] * 0.25
-            elif trait == 'Bagisiklik':
-                results[trait] = base_pred + aa['arg'] * 0.4
-            else:
-                results[trait] = base_pred
-        
-        results.update({
-            'Glu': round(aa['glu'], 1),
-            'Pro': round(aa['pro'], 1),
-            'Arg': round(aa['arg'], 1),
-            'SNP_Hit': int(snp_prof.sum())
-        })
-        
-        return {k: round(v, 2) if isinstance(v, float) else v for k, v in results.items()}
 
-# Export
-beyin = None
+    def dna_to_protein(self, dna):
+        """DNA'yı proteine çevirir (Translation)"""
+        try:
+            dna = "".join(dna.split()).upper() # Boşlukları temizle
+            dna = dna[:(len(dna)//3)*3] # 3'ün katı yap
+            return str(Seq(dna).translate(to_stop=True))
+        except: return ""
+
+    def scan_markers(self, protein_seq):
+        """Protein zincirinde fonksiyonel motifleri sayar."""
+        counts = {key: 0 for key in self.MARKERS.keys()}
+        if not protein_seq: return counts
+        for category, motifs in self.MARKERS.items():
+            for motif in motifs:
+                counts[category] += protein_seq.count(motif)
+        return counts
+
+    def get_label(self, key, val):
+        """Bilimsel sınıflandırma etiketleri."""
+        thresholds = {
+            "Brix": (5.0, 8.0), "Verim": (50, 80), "Cimlenme": (75, 90),
+            "Bagisiklik": (30, 60)
+        }
+        low, high = thresholds.get(key, (30, 70))
+        # Çimlenme gibi % içeren değerler için sayısal temizlik
+        num_val = float(str(val).replace('%', '')) if isinstance(val, str) else val
+        
+        if num_val < low: return "Kritik (Düşük)"
+        if num_val > high: return "Elite (Yüksek)"
+        return "Ticari (Normal)"
+
+    def predict(self, dna_seq):
+        protein = self.dna_to_protein(dna_seq)
+        if not protein: return {"Error": "Geçersiz DNA Dizisi!"}
+            
+        biomarks = self.scan_markers(protein)
+        seq_len = max(len(protein), 1)
+        conf = self.CROP_CONFIG.get(self.crop_type, self.CROP_CONFIG["Domates"])
+        
+        # 1. Çimlenme Gücü
+        cim_artisi = (biomarks["storage_proteins"] / seq_len) * 150
+        cim_val = min(conf["base_cim"] + cim_artisi, 99.5)
+
+        # 2. Tat (Brix)
+        brix_gain = (biomarks["sugar_transport"] / seq_len) * 60
+        brix_val = min(conf["base_brix"] + brix_gain, conf["max_brix"])
+        
+        # 3. Verim
+        yield_pot = (biomarks["biomass_growth"] / seq_len) * 120
+        verim_val = yield_pot * conf["yield_mult"]
+        
+        # 4. Bağışıklık & Stres
+        def_score = (biomarks["defense_peptides"] / seq_len) * 100
+        str_score = (biomarks["stress_response"] / seq_len) * 100
+        
+        # Ceza Mekanizması: Stres toleransı düşükse verim ve çimlenme düşer
+        if str_score < 0.4:
+            verim_val *= 0.75
+            cim_val -= 12
+            notu = "Zayıf Genetik Kararlılık"
+        else:
+            notu = "Stabil Genetik Yapı"
+
+        res = {
+            'Brix': round(brix_val, 2),
+            'Verim': round(verim_val, 2),
+            'Cimlenme': round(max(cim_val, 0), 1),
+            'Bagisiklik': round(min(def_score * 5, 100), 1),
+            'Stres': round(min(str_score * 10, 100), 1),
+            'Not': notu
+        }
+        
+        # Sınıflandırmaları ekle
+        final_res = {}
+        for k, v in res.items():
+            if k != 'Not':
+                final_res[k] = {"val": v, "label": self.get_label(k, v)}
+            else:
+                final_res[k] = v
+        return final_res
