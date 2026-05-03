@@ -34,7 +34,7 @@ class BioValentBeyin:
         instability = analysis.instability_index()
         gravy = analysis.gravy()
         
-        # --- Hata Düzeltilen Satır (Biopython 1.80+ Uyumu) ---
+        # --- DÜZELTİLEN SATIR (Biopython 1.80+ Uyumu) ---
         aa_percent = analysis.amino_acids_percent 
         
         # Çimlenme Gücü (Azot Rezervi Hesabı)
