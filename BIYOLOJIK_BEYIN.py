@@ -34,8 +34,10 @@ class BioValentBeyin:
         instability = analysis.instability_index()
         gravy = analysis.gravy()
         
+        # --- Hata Düzeltilen Satır (Biopython 1.80+ Uyumu) ---
+        aa_percent = analysis.amino_acids_percent 
+        
         # Çimlenme Gücü (Azot Rezervi Hesabı)
-        aa_percent = analysis.get_amino_acids_percent()
         n_pool = (aa_percent.get('N', 0) + aa_percent.get('Q', 0) + aa_percent.get('R', 0)) * 100
 
         return {
