@@ -8,16 +8,14 @@ st.title("🧬 BioValent")
 st.markdown("*Bilimsel Veriyi Ticari Değere Dönüştüren Islah Platformu*")
 st.markdown("---")
 
-# Beyin objesini session state'e kaydet (Veri kaybolmasın)
 if 'beyin' not in st.session_state:
     st.session_state.beyin = BioValentBeyin()
 
-# --- YAN PANEL: AI EĞİTİM MERKEZİ ---
 with st.sidebar:
     st.header("🧠 Kendi AI'nı Eğit")
-    st.write("Firmanıza özel Brix ve Verim tahminleri için saha verilerinizi yükleyin.")
+    st.write("Brix ve Verim tahminleri için saha verilerinizi (CSV) yükleyin.")
     
-    training_file = st.file_uploader("Saha Verisi (CSV Yükle)", type=['csv'])
+    training_file = st.file_uploader("Saha Verisi Yükle", type=['csv'])
     
     if training_file is not None:
         try:
@@ -27,33 +25,36 @@ with st.sidebar:
                     sonuc = st.session_state.beyin.train_custom_model(df)
                     st.success(sonuc)
         except Exception as e:
-            st.error(f"Dosya okunamadı: {e}")
+            st.error(f"Dosya hatası: {e}")
     
     st.markdown("---")
-    st.caption("BioValent Intelligence v2.0")
+    st.caption("BioValent v2.0")
 
-# --- ANA EKRAN: SÜTUNLARIN TANIMLANMASI ---
-# col1 ve col2 burada tanımlandığı için NameError almayacaksın.
 col1, col2 = st.columns([1, 1.3])
 
 with col1:
     st.subheader("📥 Veri Girişi")
-    seq_input = st.text_area("DNA veya Amino Asit Sekansı girin:", height=200, placeholder="ATGC... veya MVLS...")
+    seq_input = st.text_area("Sekans Girin:", height=200, placeholder="ATGC... veya MVLS...")
     
     if st.button("🔍 Analizi Başlat", type="primary"):
         if len(seq_input) >= 10:
             protein, s_type = st.session_state.beyin.preprocess_sequence(seq_input)
+            # Bilimsel verileri hesapla
+            sci_results = st.session_state.beyin.calculate_science(protein)
+            
+            # Tahminleri al (Eğitilmemişse None döner)
+            predictions = st.session_state.beyin.predict_phenotype(protein)
+            
             st.session_state.res = {
                 "type": s_type,
-                "protein_raw": protein,
-                "sci": st.session_state.beyin.calculate_science(protein),
-                "pred": st.session_state.beyin.predict_phenotype(protein)
+                "sci": sci_results,
+                "pred": predictions
             }
         else:
             st.error("Lütfen en az 10 karakterlik bir sekans girin.")
 
 with col2:
-    st.subheader("📊 Bilimsel & Ticari Analiz")
+    st.subheader("📊 Analiz Sonuçları")
     if 'res' in st.session_state:
         r = st.session_state.res
         
@@ -62,25 +63,23 @@ with col2:
         else:
             st.success(f"Format: {r['type']}")
             
-            # Bilimsel ve Ticari Veriler (Expander içinde)
+            # --- GÜVENLİ GÖSTERİM DÖNGÜSÜ ---
             for param, data in r["sci"].items():
-                with st.expander(f"🔹 {param}: {data['val']}", expanded=True):
-                    st.write(f"**Açıklama:** {data['desc']}")
-                    st.info(f"**Ticari Yorum:** {data['com']}")
+                # data'nın bir sözlük olduğunu ve içinde 'val' anahtarı olduğunu kontrol et
+                if isinstance(data, dict) and 'val' in data:
+                    with st.expander(f"🔹 {param}: {data['val']}", expanded=True):
+                        st.write(f"**Açıklama:** {data.get('desc', 'Bilgi yok.')}")
+                        st.info(f"**Ticari Yorum:** {data.get('com', 'Yorum yok.')}")
             
             st.markdown("---")
             st.markdown("#### 🎯 Saha Tahminleri (Yapay Zeka)")
             
-            if st.session_state.beyin.is_trained:
-                # Model eğitildiyse tahminleri göster
+            if st.session_state.beyin.is_trained and r["pred"] is not None:
                 c1, c2 = st.columns(2)
-                c1.metric("Tahmini Brix", r["pred"]["Brix"])
-                c2.metric("Tahmini Verim", f"{r['pred']['Verim']} kg/ton")
+                c1.metric("Tahmini Brix", r["pred"].get("Brix", "N/A"))
+                c2.metric("Tahmini Verim", f"{r["pred"].get('Verim', 'N/A')} kg/ton")
             else:
-                # Model eğitilmediyse uyarı ver
-                st.warning("⚠️ Brix ve Verim tahminleri için sol panelden 'Model Eğitimi' yapmalısınız.")
+                st.warning("⚠️ Tahminler için sol panelden model eğitimi yapmalısınız.")
                 c1, c2 = st.columns(2)
                 c1.metric("Tahmini Brix", "Model Eğit")
                 c2.metric("Tahmini Verim", "Model Eğit")
-
-st.markdown("---")
