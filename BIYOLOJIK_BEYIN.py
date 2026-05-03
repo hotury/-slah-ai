@@ -10,6 +10,7 @@ class BioValentBeyin:
         self.model_verim = None
 
     def preprocess_sequence(self, seq_input):
+        """DNA veya Protein sekansını temizler ve işler."""
         seq = "".join(seq_input.split()).upper()
         valid_dna = set("ATGCUN")
         if set(seq).issubset(valid_dna):
@@ -22,6 +23,7 @@ class BioValentBeyin:
         return protein, seq_type
 
     def calculate_science(self, protein_seq):
+        """Bilimsel verileri hesaplar ve ticari yorumlarını ekler."""
         valid_protein = "".join([aa for aa in protein_seq if aa in "ACDEFGHIKLMNPQRSTVWY"])
         if len(valid_protein) < 10: 
             return {"Error": "Analiz için dizi çok kısa."}
@@ -31,13 +33,15 @@ class BioValentBeyin:
         pi = analysis.isoelectric_point()
         instability = analysis.instability_index()
         gravy = analysis.gravy()
+        
+        # Biopython 1.80+ uyumlu özellik erişimi
         aa_percent = analysis.amino_acids_percent 
         n_pool = (aa_percent.get('N', 0) + aa_percent.get('Q', 0) + aa_percent.get('R', 0)) * 100
 
         return {
             "Moleküler Kütle": {
                 "val": f"{round(mw, 1)} Da",
-                "desc": "Proteinin yapısal büyüklüğünü ifade eder.",
+                "desc": "Proteinin yapısal büyüklüğünü ve karmaşıklığını ifade eder.",
                 "com": "Yüksek kütle, meyve dolgunluğu ve biyokütle artışı potansiyeline işarettir."
             },
             "İzoelektrik Nokta (pI)": {
@@ -52,8 +56,8 @@ class BioValentBeyin:
             },
             "Su Stresi (GRAVY)": {
                 "val": round(gravy, 3),
-                "desc": "Proteinin hidrofobik (su itici) dengesidir.",
-                "com": "Pozitif değerler kuraklığa ve aşırı sıcaklara karşı genetik zırh anlamına gelir."
+                "desc": "Proteinin hidrofobik (su itici) dengesini ölçer.",
+                "com": "Pozitif değerler kuraklığa ve aşırı sıcaklara karşı genetik direnç anlamına gelir."
             },
             "Çimlenme Enerjisi": {
                 "val": f"%{round(n_pool, 1)}",
@@ -63,32 +67,49 @@ class BioValentBeyin:
         }
 
     def train_custom_model(self, df):
-        """Kullanıcının yüklediği CSV ile AI'yı eğitir."""
+        """Kullanıcının yüklediği CSV ile AI modellerini eğitir."""
         try:
             X, y_brix, y_verim = [], [], []
             for _, row in df.iterrows():
                 prot, _ = self.preprocess_sequence(str(row['Sekans']))
-                valid_prot = "".join([aa for aa in prot if aa in "ACDEFGHIKLMNPQRSTVWY"])
-                if len(valid_prot) >= 10:
-                    analysis = ProteinAnalysis(valid_prot)
-                    X.append([analysis.molecular_weight(), analysis.isoelectric_point(), analysis.gravy(), analysis.instability_index()])
+                v_prot = "".join([aa for aa in prot if aa in "ACDEFGHIKLMNPQRSTVWY"])
+                if len(v_prot) >= 10:
+                    analysis = ProteinAnalysis(v_prot)
+                    # Özellikler: MW, pI, GRAVY, Instability
+                    X.append([
+                        analysis.molecular_weight(), 
+                        analysis.isoelectric_point(), 
+                        analysis.gravy(), 
+                        analysis.instability_index()
+                    ])
                     y_brix.append(float(row['Brix']))
                     y_verim.append(float(row['Verim']))
             
-            self.model_brix = RandomForestRegressor(n_estimators=100).fit(X, y_brix)
-            self.model_verim = RandomForestRegressor(n_estimators=100).fit(X, y_verim)
+            self.model_brix = RandomForestRegressor(n_estimators=100, random_state=42).fit(X, y_brix)
+            self.model_verim = RandomForestRegressor(n_estimators=100, random_state=42).fit(X, y_verim)
             self.is_trained = True
             return "Başarılı: Yapay zeka firmanıza özel verilerle eğitildi!"
         except Exception as e:
-            return f"Hata: CSV formatı hatalı. (Sütunlar: Sekans, Brix, Verim olmalı). Detay: {e}"
+            return f"Eğitim Hatası: Lütfen CSV sütunlarını (Sekans, Brix, Verim) kontrol edin. Detay: {e}"
 
     def predict_phenotype(self, protein_seq):
-        """Eğitilmiş modelle tahmin yapar."""
-        if not self.is_trained:
+        """Eğitilmiş modelle tahmin yapar. Model yoksa None döner."""
+        if not self.is_trained or self.model_brix is None:
             return None
-        analysis = ProteinAnalysis(protein_seq)
-        feats = [[analysis.molecular_weight(), analysis.isoelectric_point(), analysis.gravy(), analysis.instability_index()]]
-        return {
-            "Brix": round(self.model_brix.predict(feats)[0], 2),
-            "Verim": round(self.model_verim.predict(feats)[0], 2)
-        }
+        
+        try:
+            valid_protein = "".join([aa for aa in protein_seq if aa in "ACDEFGHIKLMNPQRSTVWY"])
+            analysis = ProteinAnalysis(valid_protein)
+            feats = [[
+                analysis.molecular_weight(), 
+                analysis.isoelectric_point(), 
+                analysis.gravy(), 
+                analysis.instability_index()
+            ]]
+            
+            return {
+                "Brix": round(float(self.model_brix.predict(feats)[0]), 2),
+                "Verim": round(float(self.model_verim.predict(feats)[0]), 2)
+            }
+        except:
+            return None
