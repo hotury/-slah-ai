@@ -5,10 +5,8 @@ from Bio.SeqUtils.ProtParam import ProteinAnalysis
 class BioValentBeyin:
     def __init__(self):
         self.is_trained = False
-        # Şirket özel modelleri burada saklanacak, şuan boş.
 
     def preprocess_sequence(self, seq_input):
-        """DNA veya Protein ayrımını yapar."""
         seq = "".join(seq_input.split()).upper()
         valid_dna = set("ATGCUN")
         if set(seq).issubset(valid_dna):
@@ -21,34 +19,46 @@ class BioValentBeyin:
         return protein, seq_type
 
     def calculate_science(self, protein_seq):
-        """%100 Bilimsel Veriler (Eğitim gerektirmez, değişmez gerçeklerdir)"""
         valid_protein = "".join([aa for aa in protein_seq if aa in "ACDEFGHIKLMNPQRSTVWY"])
         if len(valid_protein) < 10: 
-            return {"Error": "Analiz için dizi çok kısa (Min. 10 AA)."}
+            return {"Error": "Analiz için dizi çok kısa."}
 
         analysis = ProteinAnalysis(valid_protein)
-        
-        # Bilimsel Parametreler
         mw = analysis.molecular_weight()
         pi = analysis.isoelectric_point()
         instability = analysis.instability_index()
         gravy = analysis.gravy()
-        
-        # --- DÜZELTİLEN SATIR (Biopython 1.80+ Uyumu) ---
         aa_percent = analysis.amino_acids_percent 
-        
-        # Çimlenme Gücü (Azot Rezervi Hesabı)
         n_pool = (aa_percent.get('N', 0) + aa_percent.get('Q', 0) + aa_percent.get('R', 0)) * 100
 
+        # Bilimsel verileri ve ticari karşılıklarını eşleştiriyoruz
         return {
-            "Moleküler Kütle": f"{round(mw, 1)} Da",
-            "İzoelektrik Nokta (pI)": round(pi, 2),
-            "Kararlılık İndeksi": f"{round(instability, 2)}",
-            "Su Stresi Toleransı (GRAVY)": f"{round(gravy, 3)}",
-            "Çimlenme Enerjisi (Azot)": f"%{round(n_pool, 1)}",
-            "Protein Uzunluğu": f"{len(valid_protein)} AA"
+            "Moleküler Kütle": {
+                "val": f"{round(mw, 1)} Da",
+                "desc": "Proteinin yapısal büyüklüğünü ifade eder.",
+                "com": "Yüksek kütle, meyve dolgunluğu ve biyokütle artışı potansiyeline işarettir."
+            },
+            "İzoelektrik Nokta (pI)": {
+                "val": round(pi, 2),
+                "desc": f"Proteinin yüksüz olduğu pH değeri {round(pi, 2)}'dir.",
+                "com": "Düşük pH'lı topraklarda besin alım verimliliği ve aroma kalitesini belirler."
+            },
+            "Kararlılık İndeksi": {
+                "val": round(instability, 2),
+                "desc": "Hücre yapısının bozulmaya karşı direncini ölçer.",
+                "com": "40 altı değerler çok stabildir; uzun raf ömrü ve dayanıklı lojistik imkanı sağlar."
+            },
+            "Su Stresi (GRAVY)": {
+                "val": round(gravy, 3),
+                "desc": "Proteinin hidrofobik (su itici) dengesidir.",
+                "com": "Pozitif değerler kuraklığa ve aşırı sıcaklara karşı genetik zırh anlamına gelir."
+            },
+            "Çimlenme Enerjisi": {
+                "val": f"%{round(n_pool, 1)}",
+                "desc": "Amino asit bazlı azot rezerv oranını gösterir.",
+                "com": "Tohumun topraktan fırlama gücünü (Vigor) ve fide homojenliğini artırır."
+            }
         }
 
     def predict_dummy(self):
-        """Eğitilmeyen alanlar için sabit uyarı döner."""
         return "Model Eğit"
